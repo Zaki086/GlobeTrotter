@@ -78,22 +78,31 @@ api.interceptors.response.use(
 
     const isAuthEndpoint = original?.url?.includes('/auth/refresh') || original?.url?.includes('/auth/login');
 
-    if (status === 401 && original && !original._retried && !isAuthEndpoint && tokenStore.getRefresh()) {
+    if (status === 401 && original && !original._retried && !isAuthEndpoint) {
       original._retried = true;
-      try {
-        refreshPromise ??= refreshAccessToken().finally(() => {
-          refreshPromise = null;
-        });
-        const accessToken = await refreshPromise;
 
-        original.headers = { ...original.headers, Authorization: `Bearer ${accessToken}` };
-        return api.request(original);
-      } catch {
-        // Refresh failed — the session is genuinely over.
-        tokenStore.clear();
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login');
+      if (tokenStore.getRefresh()) {
+        try {
+          refreshPromise ??= refreshAccessToken().finally(() => {
+            refreshPromise = null;
+          });
+          const accessToken = await refreshPromise;
+
+          original.headers = { ...original.headers, Authorization: `Bearer ${accessToken}` };
+          return api.request(original);
+        } catch {
+          // Refresh failed — the session is genuinely over.
+          tokenStore.clear();
+          if (!window.location.pathname.startsWith('/login')) {
+            window.location.assign('/login');
+          }
         }
+      } else {
+        // A 401 with no refresh token means the stored access token is stale or
+        // bogus — most often the placeholder left behind by a previous run in
+        // mock mode. Drop it, or every subsequent request keeps 401ing with a
+        // token that can never be repaired.
+        tokenStore.clear();
       }
     }
 
