@@ -20,7 +20,8 @@ export const createTripSchema = z
     startDate: isoDate,
     endDate: isoDate,
     travelers: z.number().int().min(1, 'A trip needs at least one traveler').max(50).default(1),
-    currency: currencyCode.default('USD'),
+    // The destination catalog is India, so INR is the sensible default.
+    currency: currencyCode.default('INR'),
     status: z.nativeEnum(TripStatus).default(TripStatus.PLANNED),
     /** Optional budget ceiling captured at creation time. */
     plannedTotal: money.optional(),

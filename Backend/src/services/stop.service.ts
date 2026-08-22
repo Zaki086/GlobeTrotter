@@ -18,6 +18,7 @@ import type {
   UpdateStopInput,
 } from '../validators/stop.validator';
 import { AuditService } from './audit.service';
+import { EstimateService } from './estimate.service';
 import { BudgetService } from './budget.service';
 import { TripService } from './trip.service';
 
@@ -268,6 +269,144 @@ export class StopService {
       resourceId: stopId,
       metadata: { tripId: existing.tripId },
       ...ctx,
+    });
+  }
+
+
+  // -------------------------------------------------------------------------
+  // Nights (dynamic date cascade)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Sets how many nights a stop lasts, and slides everything after it.
+   *
+   * This is what makes the itinerary feel live: change Jaipur from 2 nights to
+   * 4 and the departure moves, every later stop shifts by the same two days,
+   * and the trip end date grows to fit. Costs are then recomputed from the
+   * destination's own rate band rather than left stale.
+   *
+   * Doing it server-side keeps one source of truth — the alternative is the
+   * client issuing N separate stop updates, any of which could fail halfway
+   * and leave the itinerary with overlapping dates.
+   */
+  static async setNights(
+    stopId: string,
+    userId: string,
+    nights: number,
+    ctx: RequestContext = {},
+  ) {
+    const target = await this.loadStopForUser(stopId, userId, 'edit');
+
+    const trip = await prisma.trip.findUniqueOrThrow({
+      where: { id: target.tripId },
+      select: { id: true, startDate: true, endDate: true, travelers: true },
+    });
+
+    const stops = await prisma.stop.findMany({
+      where: { tripId: target.tripId },
+      orderBy: { sequence: 'asc' },
+      select: {
+        id: true,
+        cityId: true,
+        sequence: true,
+        arrivalDate: true,
+        departureDate: true,
+      },
+    });
+
+    const index = stops.findIndex((s) => s.id === stopId);
+    if (index === -1) throw ApiError.notFound('Stop not found');
+
+    // Re-flow every stop from the changed one onward, preserving each of the
+    // later stops' own length.
+    let cursor = toUtcDate(stops[index].arrivalDate);
+    const updates: Array<{ id: string; arrivalDate: Date; departureDate: Date }> = [];
+
+    for (let i = index; i < stops.length; i++) {
+      const stop = stops[i];
+      const stopNights =
+        i === index ? Math.max(0, nights) : Math.max(0, diffInDays(stop.arrivalDate, stop.departureDate));
+
+      const arrival = cursor;
+      const departure = addDays(arrival, stopNights);
+      updates.push({ id: stop.id, arrivalDate: arrival, departureDate: departure });
+
+      // The next stop begins the day this one ends — same-day transfers.
+      cursor = departure;
+    }
+
+    const newTripEnd = updates.length ? updates[updates.length - 1].departureDate : trip.endDate;
+
+    await prisma.$transaction(async (tx) => {
+      // Grow the trip window first, otherwise the stop updates would sit
+      // outside it for a moment and any concurrent read would look wrong.
+      if (newTripEnd > toUtcDate(trip.endDate)) {
+        await tx.trip.update({ where: { id: trip.id }, data: { endDate: newTripEnd } });
+      }
+
+      for (const update of updates) {
+        await tx.stop.update({
+          where: { id: update.id },
+          data: { arrivalDate: update.arrivalDate, departureDate: update.departureDate },
+        });
+      }
+    });
+
+    // A shifted stop can strand its activities on days it no longer covers.
+    await this.unscheduleOutOfRangeActivities(target.tripId);
+
+    // Re-price the changed stop against its new length.
+    await this.repriceStop(stopId, trip.travelers);
+
+    await BudgetService.recalculate(target.tripId);
+
+    AuditService.queue({
+      actorId: userId,
+      action: 'stop.nights_changed',
+      resourceType: 'stop',
+      resourceId: stopId,
+      metadata: { tripId: target.tripId, nights, shiftedStops: updates.length - 1 },
+      ...ctx,
+    });
+
+    return this.listForTrip(target.tripId, userId);
+  }
+
+  /**
+   * Recomputes a stop's stay and meal figures from the city's rate band.
+   *
+   * Only touches costs the traveller has not overridden: a zero means "not set
+   * yet", so we fill it; a non-zero value is theirs and is left alone.
+   */
+  private static async repriceStop(stopId: string, travelers: number) {
+    const stop = await prisma.stop.findUnique({
+      where: { id: stopId },
+      select: {
+        id: true,
+        cityId: true,
+        arrivalDate: true,
+        departureDate: true,
+        accommodationCost: true,
+        mealsPerDayCost: true,
+      },
+    });
+    if (!stop) return;
+
+    const estimate = await EstimateService.estimateStop({
+      cityId: stop.cityId,
+      arrivalDate: toDateString(stop.arrivalDate),
+      departureDate: toDateString(stop.departureDate),
+      travelers,
+    });
+
+    await prisma.stop.update({
+      where: { id: stop.id },
+      data: {
+        accommodationCost: estimate.suggested.accommodationCost,
+        mealsPerDayCost: Number(stop.mealsPerDayCost) > 0
+          ? stop.mealsPerDayCost
+          : estimate.suggested.mealsPerDayCost,
+      },
     });
   }
 

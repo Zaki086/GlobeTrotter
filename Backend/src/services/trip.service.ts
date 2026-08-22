@@ -301,6 +301,12 @@ export class TripService {
           region: stop.city.region,
           imageUrl: stop.city.imageUrl,
           costIndex: stop.city.costIndex,
+          // The builder projects the route from these; without them the
+          // client computes NaN coordinates and draws nothing.
+          latitude: Number(stop.city.latitude),
+          longitude: Number(stop.city.longitude),
+          timezone: stop.city.timezone,
+          currency: stop.city.currency,
         },
         activities: stop.activities.map((sa) => ({
           id: sa.id,

@@ -14,6 +14,8 @@ import activityRoutes from './activity.routes';
 import profileRoutes from './profile.routes';
 import publicRoutes from './public.routes';
 import adminRoutes from './admin.routes';
+import communityRoutes from './community.routes';
+import estimateRoutes from './estimate.routes';
 
 const router = Router();
 
@@ -56,6 +58,8 @@ router.use('/cities', cityRoutes);
 router.use('/activities', activityRoutes);
 router.use('/profile', profileRoutes);
 router.use('/public', publicRoutes);
+router.use('/community', communityRoutes);
+router.use('/estimates', estimateRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;

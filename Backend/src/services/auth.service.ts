@@ -53,7 +53,16 @@ export class AuthService {
   // -------------------------------------------------------------------------
 
   static async signup(
-    input: { name: string; email: string; password: string },
+    input: {
+      name: string;
+      email: string;
+      password: string;
+      phone?: string;
+      city?: string;
+      country?: string;
+      avatarUrl?: string;
+      additionalInfo?: string;
+    },
     ctx: RequestContext = {},
   ): Promise<AuthResult> {
     // Email arrives already normalized by the Zod schema.
@@ -75,8 +84,16 @@ export class AuthService {
           email: input.email,
           passwordHash,
           // Every user gets a profile row up front so the profile endpoints
-          // never have to handle a missing-profile branch.
-          profile: { create: {} },
+          // never have to handle a missing-profile branch. The optional
+          // registration fields land here rather than on the user row.
+          profile: {
+            create: {
+              phone: input.phone,
+              country: input.country,
+              avatarUrl: input.avatarUrl,
+              bio: input.additionalInfo,
+            },
+          },
         },
       });
     } catch (err) {
