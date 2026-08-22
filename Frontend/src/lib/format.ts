@@ -124,12 +124,24 @@ export function formatTime(time: string | null | undefined): string | null {
   return `${hour}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-/** Maps a 0-100 cost index onto a coarse, human label. */
-export function costLevel(costIndex: number): { label: string; symbols: string } {
-  if (costIndex < 30) return { label: 'Budget', symbols: '$' };
-  if (costIndex < 55) return { label: 'Moderate', symbols: '$$' };
-  if (costIndex < 78) return { label: 'Premium', symbols: '$$$' };
-  return { label: 'Luxury', symbols: '$$$$' };
+/**
+ * Maps a 0-100 cost index onto a coarse, human label.
+ *
+ * The symbol follows the catalog's currency — the destinations are Indian, so
+ * a rupee sign reads far more naturally than a dollar one. An undefined index
+ * yields "Unrated" rather than silently falling into the top band.
+ */
+export function costLevel(
+  costIndex: number | null | undefined,
+  symbol = '₹',
+): { label: string; symbols: string } {
+  if (costIndex === null || costIndex === undefined || Number.isNaN(costIndex)) {
+    return { label: 'Unrated', symbols: '—' };
+  }
+  if (costIndex < 30) return { label: 'Budget', symbols: symbol };
+  if (costIndex < 55) return { label: 'Moderate', symbols: symbol.repeat(2) };
+  if (costIndex < 78) return { label: 'Premium', symbols: symbol.repeat(3) };
+  return { label: 'Luxury', symbols: symbol.repeat(4) };
 }
 
 export function initials(name: string): string {

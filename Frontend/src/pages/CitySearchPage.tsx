@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Clock, Globe2, Heart, Search, Sparkles, TrendingUp, X } from 'lucide-react';
+import { Clock, Globe2, Heart, Plus, Search, Sparkles, TrendingUp } from 'lucide-react';
 import { getCity, getCityFacets, getPopularCities, searchCities } from '@/services/city';
 import { addSavedDestination } from '@/services/profile';
 import { GlassCard } from '@/components/GlassCard';
@@ -12,6 +12,7 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { ErrorState } from '@/components/ErrorState';
 import { EmptyState } from '@/components/EmptyState';
 import { SectionHeader } from '@/components/SectionHeader';
+import { AddToTripSheet } from '@/features/cities/AddToTripSheet';
 import { Button } from '@/components/ui/button';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useToast } from '@/hooks/use-toast';
@@ -43,6 +44,7 @@ export function CitySearchPage() {
   const [region, setRegion] = useState<string | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(params.get('city'));
   const [recent, setRecent] = useState<string[]>(readRecent);
+  const [addToTripCity, setAddToTripCity] = useState<City | null>(null);
 
   const debounced = useDebouncedValue(search, 300);
   const isSearching = debounced.length > 0 || !!country || !!region;
@@ -123,25 +125,13 @@ export function CitySearchPage() {
 
       {/* Search */}
       <div className="sticky top-16 z-20 -mx-4 space-y-3 bg-background/85 px-4 py-3 backdrop-blur-xl md:static md:mx-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <SearchBar
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cities or countries…"
-            aria-label="Search cities"
-            className="pl-10"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <SearchBar
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onClear={() => setSearch('')}
+          placeholder="Search cities or countries…"
+          aria-label="Search cities"
+        />
 
         {/* Region chips */}
         {facets.data && (
@@ -164,8 +154,8 @@ export function CitySearchPage() {
           </div>
         )}
 
-        {/* Country chips, shown once a region narrows the list */}
-        {facets.data && facets.data.countries.length > 0 && (
+        {/* Country chips — pointless when the catalog covers one country. */}
+        {facets.data && facets.data.countries.length > 1 && (
           <div className="snap-x-rail">
             {facets.data.countries.slice(0, 20).map((value) => (
               <FilterChip
@@ -328,19 +318,36 @@ export function CitySearchPage() {
               </div>
             )}
 
-            <Button
-              className="w-full rounded-2xl"
-              size="lg"
-              onClick={() => void save(detail.data!.id, detail.data!.name)}
-            >
-              <Heart className="mr-2 h-4 w-4" />
-              Save destination
-            </Button>
+            {/* The PRD's "Add to Trip" action, with saving as the secondary. */}
+            <div className="space-y-2">
+              <Button
+                className="w-full rounded-2xl"
+                size="lg"
+                onClick={() => setAddToTripCity(detail.data!)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add to trip
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full rounded-2xl"
+                onClick={() => void save(detail.data!.id, detail.data!.name)}
+              >
+                <Heart className="mr-2 h-4 w-4" />
+                Save destination
+              </Button>
+            </div>
           </div>
         ) : (
           <ErrorState title="Could not load this city" onRetry={() => void detail.refetch()} />
         )}
       </BottomSheet>
+
+      <AddToTripSheet
+        open={!!addToTripCity}
+        onClose={() => setAddToTripCity(null)}
+        city={addToTripCity}
+      />
     </div>
   );
 }

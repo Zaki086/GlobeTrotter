@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CalendarDays,
   Compass,
+  Globe2,
   MapPin,
   Plus,
   Sparkles,
@@ -24,7 +25,7 @@ import { CountUp } from '@/components/CountUp';
 import { SectionHeader } from '@/components/SectionHeader';
 import { formatCountdown, formatDateRange, formatMoney, fallbackImage } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { DashboardTripCard } from '@/types';
+import type { City, DashboardTripCard } from '@/types';
 
 const stagger = {
   hidden: {},
@@ -43,6 +44,23 @@ export function DashboardPage() {
     queryKey: ['dashboard'],
     queryFn: getDashboard,
   });
+
+  /**
+   * "Top regional selections" (screen 3) — the highest-scoring recommended
+   * city per region, so the row shows breadth rather than five cities from
+   * the same part of the world.
+   */
+  const regionalPicks = useMemo(() => {
+    const best = new Map<string, City>();
+    for (const city of data?.recommendedCities ?? []) {
+      const current = best.get(city.region);
+      if (!current || city.popularity > current.popularity) best.set(city.region, city);
+    }
+    return [...best.entries()]
+      .map(([region, city]) => ({ region, city }))
+      .sort((a, b) => b.city.popularity - a.city.popularity)
+      .slice(0, 5);
+  }, [data]);
 
   // The nearest upcoming trip drives the hero; fall back to an ongoing one.
   const featured = useMemo<DashboardTripCard | undefined>(
@@ -302,11 +320,68 @@ export function DashboardPage() {
       )}
 
       {/* ---------------------------------------------------------------- */}
-      {/* Recent trips                                                      */}
+      {/* Top Regional Selections (wireframe screen 3)                       */}
+      {/* ---------------------------------------------------------------- */}
+      {regionalPicks.length > 0 && (
+        <motion.section variants={riseIn} className="space-y-4">
+          <SectionHeader
+            title="Top regional selections"
+            icon={Globe2}
+            subtitle="The most loved destination in each region"
+            action={
+              <Button variant="ghost" size="sm" onClick={() => navigate('/cities')}>
+                All regions
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            }
+          />
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {regionalPicks.map((entry) => (
+              <button
+                key={entry.region}
+                onClick={() => navigate(`/cities?city=${entry.city.id}`)}
+                className="group relative aspect-[3/4] overflow-hidden rounded-2xl text-left"
+              >
+                <img
+                  src={entry.city.imageUrl ?? fallbackImage(entry.city.name)}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="hero-scrim absolute inset-0" />
+                <span className="absolute left-2.5 top-2.5 rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md">
+                  {entry.region}
+                </span>
+                <span className="absolute inset-x-0 bottom-0 p-2.5">
+                  <span className="block truncate text-sm font-semibold text-white">
+                    {entry.city.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-white/80">
+                    {entry.city.country}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Previous trips                                                    */}
       {/* ---------------------------------------------------------------- */}
       {recentTrips.length > 0 ? (
         <motion.section variants={riseIn} className="space-y-4">
-          <SectionHeader title="Recent trips" icon={TrendingUp} />
+          <SectionHeader
+            title="Previous trips"
+            icon={TrendingUp}
+            action={
+              <Button variant="ghost" size="sm" onClick={() => navigate('/trips')}>
+                All trips
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            }
+          />
           <div className="grid gap-4 md:grid-cols-2">
             {recentTrips.slice(0, 4).map((trip) => (
               <TripCard key={trip.id} trip={trip} onClick={() => navigate(`/trips/${trip.id}`)} />

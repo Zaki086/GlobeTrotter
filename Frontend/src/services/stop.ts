@@ -194,3 +194,41 @@ export async function removeStopActivity(stopId: string, activityId: string): Pr
   }
   await request<void>({ method: 'DELETE', url: `/stops/${stopId}/activities/${activityId}` });
 }
+
+/**
+ * Sets a stop's length in nights. The backend shifts the departure date and
+ * every later stop, then re-prices — one call rather than the client trying to
+ * keep a chain of dates consistent itself.
+ */
+export async function setStopNights(stopId: string, nights: number): Promise<Stop[]> {
+  if (USE_MOCK) {
+    await delay();
+    for (const trip of mockTrips) {
+      const index = trip.stops.findIndex((s) => s.id === stopId);
+      if (index === -1) continue;
+
+      let cursor = new Date(trip.stops[index].arrivalDate);
+      for (let i = index; i < trip.stops.length; i++) {
+        const stop = trip.stops[i];
+        const stopNights =
+          i === index
+            ? nights
+            : Math.round(
+                (Date.parse(stop.departureDate) - Date.parse(stop.arrivalDate)) / 86_400_000,
+              );
+        stop.arrivalDate = cursor.toISOString().slice(0, 10);
+        cursor = new Date(cursor.getTime() + stopNights * 86_400_000);
+        stop.departureDate = cursor.toISOString().slice(0, 10);
+        stop.nights = stopNights;
+        stop.days = stopNights + 1;
+      }
+      if (cursor.toISOString().slice(0, 10) > trip.endDate) {
+        trip.endDate = cursor.toISOString().slice(0, 10);
+      }
+      computeBudget(trip);
+      return trip.stops;
+    }
+    throw new Error('Stop not found');
+  }
+  return request<Stop[]>({ method: 'PATCH', url: `/stops/${stopId}/nights`, data: { nights } });
+}

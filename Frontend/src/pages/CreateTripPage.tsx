@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -8,18 +8,20 @@ import {
   Calendar,
   Check,
   Image as ImageIcon,
+  Lightbulb,
   Loader2,
   MapPin,
   Users,
   Wallet,
 } from 'lucide-react';
 import { createTrip } from '@/services/trip';
+import { getPopularCities } from '@/services/city';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { CURRENCIES } from '@/lib/constants';
+import { CURRENCIES, DEFAULT_CURRENCY } from '@/lib/constants';
 import { fallbackImage, formatDateRange, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -79,7 +81,7 @@ export function CreateTripPage() {
     startDate: todayPlus(30),
     endDate: todayPlus(37),
     travelers: 2,
-    currency: 'USD',
+    currency: DEFAULT_CURRENCY,
     plannedTotal: '',
     coverImageUrl: '',
   });
@@ -118,6 +120,12 @@ export function CreateTripPage() {
         return null;
     }
   }, [step, form, nights]);
+
+  // Popular destinations, shown on the review step as a starting point.
+  const suggestions = useQuery({
+    queryKey: ['cities', 'popular'],
+    queryFn: () => getPopularCities(6),
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -396,6 +404,41 @@ export function CreateTripPage() {
 
               {STEPS[step].id === 'review' && (
                 <div className="space-y-4">
+                  {/* Wireframe screen 4: "Suggestions for places to visit /
+                      activities to perform" sit alongside the trip form so the
+                      traveler has somewhere to start once the trip exists. */}
+                  {(suggestions.data?.length ?? 0) > 0 && (
+                    <div className="space-y-2">
+                      <p className="flex items-center gap-1.5 text-sm font-medium">
+                        <Lightbulb className="h-4 w-4 text-accent" />
+                        Places you could add
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {suggestions.data?.slice(0, 6).map((city) => (
+                          <div
+                            key={city.id}
+                            className="relative aspect-[4/3] overflow-hidden rounded-xl"
+                            title={`${city.name}, ${city.country}`}
+                          >
+                            <img
+                              src={city.imageUrl ?? fallbackImage(city.name)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                            <div className="hero-scrim absolute inset-0" />
+                            <span className="absolute inset-x-0 bottom-0 truncate p-1.5 text-[11px] font-medium text-white">
+                              {city.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        You'll pick your stops right after creating the trip.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="relative h-40 overflow-hidden rounded-2xl">
                     <img
                       src={form.coverImageUrl || fallbackImage(form.name || 'trip')}

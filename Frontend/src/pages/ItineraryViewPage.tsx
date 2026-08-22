@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { getTrip, getTripItinerary, createShareLink } from '@/services/trip';
 import { GlassCard } from '@/components/GlassCard';
-import { TimelineTile } from '@/components/TimelineTile';
+import { DayExpenseTable } from '@/features/itinerary/DayExpenseTable';
 import { BottomSheet } from '@/components/BottomSheet';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { ErrorState } from '@/components/ErrorState';
@@ -295,21 +295,13 @@ export function ItineraryViewPage() {
                     </div>
                   )}
 
-                  {day.activities.length === 0 ? (
-                    <p className="rounded-2xl bg-muted px-4 py-8 text-center text-sm text-muted-foreground">
-                      A free day — nothing scheduled.
-                    </p>
-                  ) : (
-                    <ol className="space-y-0">
-                      {day.activities.map((activity, i) => (
-                        <TimelineTile
-                          key={activity.id}
-                          activity={activity}
-                          isLast={i === day.activities.length - 1}
-                        />
-                      ))}
-                    </ol>
-                  )}
+                  {/* Screen 9: activities on the left, their expense on the
+                      right, with the day total reconciling underneath. */}
+                  <DayExpenseTable
+                    activities={day.activities}
+                    currency={trip.currency}
+                    travelers={trip.travelers}
+                  />
                 </GlassCard>
               </motion.div>
             )}

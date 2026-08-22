@@ -1,4 +1,4 @@
-import { USE_MOCK, request, delay } from '@/lib/api';
+import { USE_MOCK, request, requestPaginated, delay } from '@/lib/api';
 import { getBudget, getTripById, mockExpenses, computeBudget } from '@/services/mock-data';
 import type {
   Budget,
@@ -52,8 +52,7 @@ export async function listTripExpenses(
     const start = (page - 1) * limit;
     return { items: items.slice(start, start + limit), total: items.length };
   }
-  return request<Paginated<Expense>>({
-    method: 'GET',
+  return requestPaginated<Expense>({
     url: `/trips/${tripId}/expenses`,
     params: query as Record<string, unknown>,
   });

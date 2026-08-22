@@ -12,11 +12,14 @@ import {
   Shield,
   Sun,
   User,
+  Users,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTheme } from '@/hooks/use-theme';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageTransition } from '@/components/PageTransition';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -31,12 +34,14 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { to: '/dashboard', icon: Home, label: 'Home' },
   { to: '/trips', icon: Map, label: 'Trips' },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
+  { to: '/community', icon: Users, label: 'Community' },
   { to: '/profile', icon: User, label: 'Profile' },
 ];
 
 const desktopExtras = [
   { to: '/cities', icon: Search, label: 'Explore' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
+  { to: '/budget', icon: Wallet, label: 'Budget' },
 ];
 
 export function MainLayout() {
@@ -187,9 +192,13 @@ export function MainLayout() {
 
         <main className={cn('flex-1', isMobile ? 'pb-28' : 'pb-10')}>
           <div className="mx-auto w-full max-w-6xl px-4 py-5 md:px-8 md:py-8">
-            <PageTransition key={location.pathname}>
-              <Outlet />
-            </PageTransition>
+            {/* Scoped inside the shell so a page crash keeps the nav usable
+                and the user can simply move to another tab. */}
+            <ErrorBoundary resetKey={location.pathname}>
+              <PageTransition key={location.pathname}>
+                <Outlet />
+              </PageTransition>
+            </ErrorBoundary>
           </div>
         </main>
       </div>

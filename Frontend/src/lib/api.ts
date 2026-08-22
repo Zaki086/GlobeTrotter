@@ -8,11 +8,31 @@ import type { ApiResponse, TokenPair } from '@/types';
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false';
 
 /**
- * The backend mounts everything under `/api/v1` (API_PREFIX). This previously
- * defaulted to `/api`, so every real request 404'd.
+ * Where the API lives.
+ *
+ * `VITE_API_URL` wins when set. Otherwise the host is derived from whatever
+ * the browser is currently on — which is what makes the app work from a phone
+ * without rebuilding: on a handset `localhost` means the handset, so a
+ * hard-coded localhost URL can never reach the laptop serving the app.
+ *
+ * The path must include `/api/v1`; the backend mounts every route under that
+ * prefix and `/api` alone 404s.
  */
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api/v1';
+const API_PORT = (import.meta.env.VITE_API_PORT as string | undefined) ?? '4300';
+
+function resolveApiBaseUrl(): string {
+  const explicit = import.meta.env.VITE_API_URL as string | undefined;
+  if (explicit) return explicit;
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:${API_PORT}/api/v1`;
+  }
+
+  return `http://localhost:${API_PORT}/api/v1`;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export const ACCESS_TOKEN_KEY = 'accessToken';
 export const REFRESH_TOKEN_KEY = 'refreshToken';

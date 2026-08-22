@@ -127,9 +127,17 @@ export interface LoginInput {
 }
 
 export interface SignupInput {
+  /** Composed from firstName + lastName when those are supplied. */
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   password: string;
+  phone?: string;
+  city?: string;
+  country?: string;
+  avatarUrl?: string;
+  additionalInfo?: string;
 }
 
 export interface AuthResult {
@@ -826,4 +834,162 @@ export interface ListExpensesQuery {
 export interface Paginated<T> {
   items: T[];
   total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Community (Screen 10)
+// ---------------------------------------------------------------------------
+
+export interface CommunityAuthor {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface CommunityComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: CommunityAuthor;
+}
+
+export interface CommunityPost {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  tags: string[];
+  rating: number | null;
+  likeCount: number;
+  commentCount: number;
+  likedByViewer: boolean;
+  createdAt: string;
+  author: CommunityAuthor;
+  city: {
+    id: string;
+    name: string;
+    country: string;
+    countryCode: string;
+    imageUrl: string | null;
+  } | null;
+  trip: {
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+    isPublic: boolean;
+  } | null;
+}
+
+export interface CommunityPostDetail extends CommunityPost {
+  comments: CommunityComment[];
+}
+
+export type CommunityGroupBy = 'none' | 'city' | 'tag' | 'rating' | 'author';
+export type CommunitySortBy = 'recent' | 'popular' | 'rating' | 'discussed';
+
+export interface CommunityGroup {
+  key: string;
+  count: number;
+  posts: CommunityPost[];
+}
+
+export interface CommunityFeed {
+  items: CommunityPost[];
+  groups: CommunityGroup[] | null;
+  groupBy: CommunityGroupBy;
+}
+
+export interface ListPostsQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  cityId?: string;
+  tripId?: string;
+  authorId?: string;
+  tag?: string;
+  minRating?: number;
+  groupBy?: CommunityGroupBy;
+  sortBy?: CommunitySortBy;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface CreatePostInput {
+  title: string;
+  body: string;
+  imageUrl?: string;
+  tripId?: string;
+  cityId?: string;
+  tags?: string[];
+  rating?: number;
+}
+
+export interface CommunityTag {
+  tag: string;
+  count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic cost engine
+// ---------------------------------------------------------------------------
+
+export type ComfortTier = 'BUDGET' | 'MID' | 'LUXURY';
+export type TransportMode = 'FLIGHT' | 'TRAIN' | 'BUS' | 'CAR';
+
+export interface TierOption {
+  tier: ComfortTier;
+  nightlyRate: number;
+  total: number;
+}
+
+export interface TransportEstimate {
+  fromCity: string;
+  distanceKm: number;
+  mode: TransportMode;
+  durationHours: number;
+  costPerPerson: number;
+  total: number;
+  note: string;
+}
+
+export interface StopEstimate {
+  city: { id: string; name: string; currency: string };
+  tier: ComfortTier;
+  days: number;
+  nights: number;
+  rooms: number;
+  travelers: number;
+  season: { label: string; multiplier: number };
+  accommodation: {
+    nightlyRate: number;
+    nights: number;
+    rooms: number;
+    total: number;
+    options: TierOption[];
+  };
+  meals: { perPersonPerDay: number; days: number; total: number };
+  transport: TransportEstimate | null;
+  suggested: {
+    accommodationCost: number;
+    transportCost: number;
+    mealsPerDayCost: number;
+  };
+  total: number;
+}
+
+export interface RouteLegEstimate extends StopEstimate {
+  arrivalDate: string;
+  departureDate: string;
+}
+
+export interface RouteEstimate {
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  travelers: number;
+  tier: ComfortTier;
+  legs: RouteLegEstimate[];
+  total: number;
+  perPerson: number;
+  perDay: number;
 }

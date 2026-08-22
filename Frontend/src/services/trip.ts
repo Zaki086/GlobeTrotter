@@ -1,4 +1,4 @@
-import { USE_MOCK, request, delay } from '@/lib/api';
+import { USE_MOCK, request, requestPaginated, delay } from '@/lib/api';
 import {
   mockTrips,
   getTripById,
@@ -92,7 +92,9 @@ export async function listTrips(query: ListTripsQuery = {}): Promise<Paginated<T
     const start = (page - 1) * limit;
     return { items: items.slice(start, start + limit), total: items.length };
   }
-  return request<Paginated<TripSummary>>({ method: 'GET', url: '/trips', params: query as Record<string, unknown> });
+  // The API returns `data: TripSummary[]` with a sibling `meta` envelope —
+  // not `{ items, total }` — so it must be unwrapped, not cast.
+  return requestPaginated<TripSummary>({ url: '/trips', params: query as Record<string, unknown> });
 }
 
 export async function getTrip(id: string): Promise<TripDetail> {

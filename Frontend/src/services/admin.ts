@@ -1,4 +1,4 @@
-import { USE_MOCK, request, delay } from '@/lib/api';
+import { USE_MOCK, request, requestPaginated, delay } from '@/lib/api';
 import { mockCities, mockActivities, mockTrips, mockCurrentUser } from '@/services/mock-data';
 import type {
   AdminAnalytics,
@@ -126,8 +126,7 @@ export async function listUsers(query: { page?: number; limit?: number; search?:
     const start = (page - 1) * limit;
     return { items: filtered.slice(start, start + limit), total: filtered.length };
   }
-  return request<Paginated<AdminUserListItem>>({
-    method: 'GET',
+  return requestPaginated<AdminUserListItem>({
     url: '/admin/users',
     params: query as Record<string, unknown>,
   });
@@ -175,4 +174,109 @@ export async function updateUser(
     url: `/admin/users/${userId}`,
     data: input,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Content oversight
+// ---------------------------------------------------------------------------
+
+export interface AdminTripRow {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  isPublic: boolean;
+  travelers: number;
+  currency: string;
+  createdAt: string;
+  owner: { id: string; name: string; email: string };
+  estimatedTotal: number;
+  stopCount: number;
+  memberCount: number;
+  shareCount: number;
+}
+
+export interface AdminPostRow {
+  id: string;
+  title: string;
+  tags: string[];
+  rating: number | null;
+  likeCount: number;
+  commentCount: number;
+  createdAt: string;
+  author: { id: string; name: string; email: string };
+  city: { name: string } | null;
+}
+
+export interface AdminCityRow {
+  id: string;
+  name: string;
+  region: string;
+  currency: string;
+  costIndex: number;
+  popularity: number;
+  rates: { budget: number; mid: number; luxury: number };
+  peakMonths: number[];
+  activityCount: number;
+  tripCount: number;
+}
+
+export interface AdminAuditRow {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  actor: { id: string; name: string; email: string } | null;
+}
+
+export async function listAllTrips(query: { page?: number; limit?: number; search?: string } = {}) {
+  if (USE_MOCK) {
+    await delay();
+    return { items: [] as AdminTripRow[], total: 0 };
+  }
+  return requestPaginated<AdminTripRow>({ url: '/admin/trips', params: query });
+}
+
+export async function listAllPosts(query: { page?: number; limit?: number } = {}) {
+  if (USE_MOCK) {
+    await delay();
+    return { items: [] as AdminPostRow[], total: 0 };
+  }
+  return requestPaginated<AdminPostRow>({ url: '/admin/posts', params: query });
+}
+
+export async function listCatalog(query: { page?: number; limit?: number; search?: string } = {}) {
+  if (USE_MOCK) {
+    await delay();
+    return { items: [] as AdminCityRow[], total: 0 };
+  }
+  return requestPaginated<AdminCityRow>({ url: '/admin/catalog', params: query });
+}
+
+export async function listAuditLogs(query: { page?: number; limit?: number; action?: string } = {}) {
+  if (USE_MOCK) {
+    await delay();
+    return { items: [] as AdminAuditRow[], total: 0 };
+  }
+  return requestPaginated<AdminAuditRow>({ url: '/admin/audit-logs', params: query });
+}
+
+/** Adjusts a destination's nightly rate bands — feeds the cost engine. */
+export async function updateCityRates(
+  cityId: string,
+  patch: Partial<{ stayBudget: number; stayMid: number; stayLuxury: number; costIndex: number; popularity: number }>,
+) {
+  return request<{ id: string; name: string }>({
+    method: 'PATCH',
+    url: `/admin/catalog/${cityId}/rates`,
+    data: patch,
+  });
+}
+
+/** Moderator removal of a community post. */
+export async function moderatePost(postId: string): Promise<void> {
+  await request<void>({ method: 'DELETE', url: `/community/${postId}` });
 }

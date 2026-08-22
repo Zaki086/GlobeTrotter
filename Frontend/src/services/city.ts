@@ -1,4 +1,4 @@
-import { USE_MOCK, request, delay } from '@/lib/api';
+import { USE_MOCK, request, requestPaginated, delay } from '@/lib/api';
 import { mockCities, getCityDetail } from '@/services/mock-data';
 import type { City, CityDetail, CityFacets, ListCitiesQuery, Paginated } from '@/types';
 
@@ -33,7 +33,7 @@ export async function searchCities(query: ListCitiesQuery = {}): Promise<Paginat
     const start = (page - 1) * limit;
     return { items: items.slice(start, start + limit), total: items.length };
   }
-  return request<Paginated<City>>({ method: 'GET', url: '/cities', params: query as Record<string, unknown> });
+  return requestPaginated<City>({ url: '/cities', params: query as Record<string, unknown> });
 }
 
 export async function getCity(id: string): Promise<CityDetail> {

@@ -992,3 +992,52 @@ export const mockNotifications: Notification[] = [
 ];
 
 export const mockShareLinks: ShareLink[] = mockTrips.flatMap((t) => t.shares);
+
+// ---------------------------------------------------------------------------
+// Community (Screen 10)
+// ---------------------------------------------------------------------------
+
+const communitySeed: Array<{
+  title: string;
+  body: string;
+  cityIndex: number;
+  tags: string[];
+  rating: number;
+  likes: number;
+  comments: number;
+}> = [
+  { title: "Two weeks in Japan on a JR Pass — what I'd do differently", cityIndex: 1, tags: ['japan', 'rail', 'budget'], rating: 5, likes: 34, comments: 6,
+    body: 'The pass paid for itself by day four, but I over-packed the Kyoto leg. Three temple days in a row is one too many — swap one for a day trip to Nara and your feet will thank you.' },
+  { title: 'Fushimi Inari at 6am is a completely different shrine', cityIndex: 1, tags: ['japan', 'sunrise', 'free'], rating: 5, likes: 51, comments: 9,
+    body: 'By 9am the lower gates are a queue. At six there was nobody but a cat and two runners. The full loop took just under two hours at a slow pace.' },
+  { title: 'Tokyo food crawl: skip the famous ramen queue', cityIndex: 0, tags: ['japan', 'food'], rating: 4, likes: 28, comments: 4,
+    body: 'The two-hour queue place was fine. The tiny counter two streets over was better and I walked straight in. Tsukiji before 9am for grilled scallops is the real move.' },
+  { title: 'The Jungfrau day is expensive and worth every franc', cityIndex: 2, tags: ['europe', 'mountains', 'rail'], rating: 5, likes: 42, comments: 7,
+    body: 'Check the webcam the night before — we moved our booking by a day and got clear sky instead of fog. Lauterbrunnen on the cheap day was almost as good.' },
+  { title: 'Venice without the crowds is timing, not luck', cityIndex: 3, tags: ['europe', 'italy', 'tips'], rating: 4, likes: 37, comments: 5,
+    body: 'Stay in Cannaregio, not San Marco. Walk the back canals before 8am and after 7pm. Cicchetti bars near the Jewish quarter are half the price of anything by the Rialto.' },
+  { title: 'Lisbon in three days: trams, tiles and too many pastries', cityIndex: 4, tags: ['europe', 'citybreak'], rating: 5, likes: 23, comments: 3,
+    body: 'Tram 28 is worth it if you board at the start of the line. Sintra needs a full day — we tried to squeeze it into a half and regretted it.' },
+];
+
+export const mockCommunityPosts: import('@/types').CommunityPost[] = communitySeed.map((seed, i) => {
+  const city = mockCities[seed.cityIndex % mockCities.length];
+  const author = [mockCurrentUser, { id: 'user-2', name: 'Sam Okafor' }, { id: 'user-3', name: 'Mika Tanaka' }][i % 3];
+  return {
+    id: `post-${i + 1}`,
+    title: seed.title,
+    body: seed.body,
+    imageUrl: `https://picsum.photos/seed/community-${i}/800/500`,
+    tags: seed.tags,
+    rating: seed.rating,
+    likeCount: seed.likes,
+    commentCount: seed.comments,
+    likedByViewer: i % 4 === 0,
+    createdAt: new Date(Date.now() - i * 19 * 36e5).toISOString(),
+    author: { id: author.id, name: author.name, avatarUrl: null },
+    city: city
+      ? { id: city.id, name: city.name, country: city.country, countryCode: city.countryCode, imageUrl: city.imageUrl }
+      : null,
+    trip: null,
+  };
+});

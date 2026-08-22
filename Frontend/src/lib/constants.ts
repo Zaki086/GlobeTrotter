@@ -1,6 +1,9 @@
 export const APP_NAME = 'GlobeTrotter';
 
-export const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'] as const;
+/** INR leads — the destination catalog is India. */
+export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD'] as const;
+
+export const DEFAULT_CURRENCY = 'INR';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English' },

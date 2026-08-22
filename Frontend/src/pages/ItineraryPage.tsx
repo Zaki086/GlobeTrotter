@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { getTrip } from '@/services/trip';
-import { deleteStop, removeStopActivity, reorderStops } from '@/services/stop';
+import { deleteStop, removeStopActivity, reorderStops, setStopNights } from '@/services/stop';
 import { GlassCard } from '@/components/GlassCard';
 import { BottomSheet } from '@/components/BottomSheet';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
@@ -26,6 +26,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { AddStopSheet } from '@/features/itinerary/AddStopSheet';
 import { AddActivitySheet } from '@/features/itinerary/AddActivitySheet';
 import { RoutePreview } from '@/features/itinerary/RoutePreview';
+import { NightsStepper } from '@/features/itinerary/NightsStepper';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -109,6 +110,24 @@ export function ItineraryPage() {
       if (trip?.stops) setOrder(trip.stops);
       toast(err.message, 'error');
     },
+  });
+
+  /**
+   * Changing nights re-flows every later stop's dates server-side, so the whole
+   * trip is refetched rather than patched locally.
+   */
+  const changeNights = useMutation({
+    mutationFn: ({ stopId, nights }: { stopId: string; nights: number }) =>
+      setStopNights(stopId, nights),
+    onSuccess: (_data, variables) => {
+      invalidate();
+      const stop = order.find((s) => s.id === variables.stopId);
+      toast(
+        `${stop?.city.name ?? 'Stop'} set to ${variables.nights} ${variables.nights === 1 ? 'night' : 'nights'} — later stops shifted`,
+        'success',
+      );
+    },
+    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   const removeStop = useMutation({
@@ -240,6 +259,8 @@ export function ItineraryPage() {
               onDragEnd={handleReorderEnd}
               onAddActivity={() => setActivityTarget(stop)}
               onDeleteStop={() => setPendingStopDelete(stop)}
+              onNightsChange={(nights) => changeNights.mutate({ stopId: stop.id, nights })}
+              nightsPending={changeNights.isPending && changeNights.variables?.stopId === stop.id}
               onRemoveActivity={(activityId) =>
                 removeActivity.mutate({ stopId: stop.id, activityId })
               }
@@ -314,6 +335,8 @@ function StopRow({
   onAddActivity,
   onDeleteStop,
   onRemoveActivity,
+  onNightsChange,
+  nightsPending,
 }: {
   stop: Stop;
   index: number;
@@ -323,6 +346,8 @@ function StopRow({
   onAddActivity: () => void;
   onDeleteStop: () => void;
   onRemoveActivity: (activityId: string) => void;
+  onNightsChange: (nights: number) => void;
+  nightsPending: boolean;
 }) {
   const controls = useDragControls();
   const [expanded, setExpanded] = useState(true);
@@ -392,10 +417,24 @@ function StopRow({
             </div>
             <p className="shrink-0 text-right text-xs text-white/85">
               {formatDateShort(stop.arrivalDate)} – {formatDateShort(stop.departureDate)}
-              <br />
-              {stop.nights} {stop.nights === 1 ? 'night' : 'nights'}
             </p>
           </div>
+        </div>
+
+        {/* Length of stay — drives the dates for this and every later stop */}
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">How long here?</p>
+            <p className="text-[11px] text-muted-foreground">
+              Later stops shift to match
+            </p>
+          </div>
+          <NightsStepper
+            nights={stop.nights}
+            onChange={onNightsChange}
+            disabled={!canEdit}
+            pending={nightsPending}
+          />
         </div>
 
         {/* Costs */}

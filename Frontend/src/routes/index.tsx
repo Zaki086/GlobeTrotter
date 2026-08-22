@@ -17,7 +17,15 @@ import { CalendarPage } from '@/pages/CalendarPage';
 import { BudgetPage } from '@/pages/BudgetPage';
 import { SharedItineraryPage } from '@/pages/SharedItineraryPage';
 import { ProfilePage } from '@/pages/ProfilePage';
-import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
+import { AdminLayout } from '@/components/layouts/AdminLayout';
+import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
+import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
+import { AdminTripsPage } from '@/pages/admin/AdminTripsPage';
+import { AdminCommunityPage } from '@/pages/admin/AdminCommunityPage';
+import { AdminCatalogPage } from '@/pages/admin/AdminCatalogPage';
+import { AdminAnalyticsPage } from '@/pages/admin/AdminAnalyticsPage';
+import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
+import { CommunityPage } from '@/pages/CommunityPage';
 
 /** Shown while the session is being resolved, so routes never flash blank. */
 function RouteFallback() {
@@ -90,6 +98,7 @@ export function AppRoutes() {
       children: [
         // Public share page — readable without an account.
         { path: '/public/:slug', element: <SharedItineraryPage /> },
+        { path: '/community', element: <CommunityPage /> },
 
         {
           element: <ProtectedRoute />,
@@ -109,9 +118,25 @@ export function AppRoutes() {
           ],
         },
 
+      ],
+    },
+
+    // The admin console is its own shell — not nested in the traveller layout,
+    // so it gets its own chrome rather than looking like the same product.
+    {
+      element: <AdminRoute />,
+      children: [
         {
-          element: <AdminRoute />,
-          children: [{ path: '/admin', element: <AdminDashboardPage /> }],
+          element: <AdminLayout />,
+          children: [
+            { path: '/admin', element: <AdminOverviewPage /> },
+            { path: '/admin/users', element: <AdminUsersPage /> },
+            { path: '/admin/trips', element: <AdminTripsPage /> },
+            { path: '/admin/community', element: <AdminCommunityPage /> },
+            { path: '/admin/catalog', element: <AdminCatalogPage /> },
+            { path: '/admin/analytics', element: <AdminAnalyticsPage /> },
+            { path: '/admin/audit', element: <AdminAuditPage /> },
+          ],
         },
       ],
     },

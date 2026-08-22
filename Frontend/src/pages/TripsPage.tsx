@@ -2,20 +2,36 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowUpDown, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { CircleDot, Clock, Plus, Trash2 } from 'lucide-react';
 import { deleteTrip, listTrips } from '@/services/trip';
 import { TripCard } from '@/components/TripCard';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { ErrorState } from '@/components/ErrorState';
 import { EmptyState } from '@/components/EmptyState';
 import { BottomSheet } from '@/components/BottomSheet';
-import { SearchBar } from '@/components/SearchBar';
+import { ListToolbar, Pill, type ToolbarOption } from '@/components/ListToolbar';
+import { SectionHeader } from '@/components/SectionHeader';
 import { Button } from '@/components/ui/button';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useToast } from '@/hooks/use-toast';
 import { TRIP_STATUS_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import type { ListTripsQuery, TripStatus } from '@/types';
+import type { ListTripsQuery, TripStatus, TripSummary } from '@/types';
+
+type GroupBy = 'phase' | 'none' | 'status' | 'country';
+
+const GROUP_OPTIONS: ToolbarOption<GroupBy>[] = [
+  { value: 'phase', label: 'Trip phase' },
+  { value: 'status', label: 'Status' },
+  { value: 'country', label: 'Destination' },
+  { value: 'none', label: 'No grouping' },
+];
+
+const SORT_OPTIONS: ToolbarOption<NonNullable<ListTripsQuery['sortBy']>>[] = [
+  { value: 'startDate', label: 'Departure date' },
+  { value: 'createdAt', label: 'Recently created' },
+  { value: 'name', label: 'Name' },
+];
 
 const FILTERS: { value: NonNullable<ListTripsQuery['filter']>; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -24,13 +40,28 @@ const FILTERS: { value: NonNullable<ListTripsQuery['filter']>; label: string }[]
   { value: 'past', label: 'Past' },
 ];
 
-const SORTS: { value: NonNullable<ListTripsQuery['sortBy']>; label: string }[] = [
-  { value: 'startDate', label: 'Departure date' },
-  { value: 'createdAt', label: 'Recently created' },
-  { value: 'name', label: 'Name' },
-];
-
 const STATUSES = Object.keys(TRIP_STATUS_LABELS) as TripStatus[];
+
+/**
+ * Screen 6 — "User Trip Listing".
+ *
+ * The wireframe groups trips under Ongoing / Up-coming / Completed headings
+ * rather than showing one flat list, so "Trip phase" is the default grouping.
+ * The phase comes from the trip's own dates, not its status field, so a trip
+ * left as PLANNED still files under Completed once it has ended.
+ */
+function phaseOf(trip: TripSummary): 'ongoing' | 'upcoming' | 'completed' {
+  const today = new Date().toISOString().slice(0, 10);
+  if (trip.endDate < today) return 'completed';
+  if (trip.startDate > today) return 'upcoming';
+  return 'ongoing';
+}
+
+const PHASE_META = {
+  ongoing: { label: 'Ongoing', icon: CircleDot },
+  upcoming: { label: 'Up-coming', icon: Clock },
+  completed: { label: 'Completed', icon: CircleDot },
+} as const;
 
 export function TripsPage() {
   const navigate = useNavigate();
@@ -40,12 +71,11 @@ export function TripsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<NonNullable<ListTripsQuery['filter']>>('all');
   const [status, setStatus] = useState<TripStatus | undefined>();
+  const [groupBy, setGroupBy] = useState<GroupBy>('phase');
   const [sortBy, setSortBy] = useState<NonNullable<ListTripsQuery['sortBy']>>('startDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
-  // Avoids a request per keystroke while the user is still typing.
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const query = useMemo<ListTripsQuery>(
@@ -55,7 +85,7 @@ export function TripsPage() {
       status,
       sortBy,
       sortOrder,
-      limit: 50,
+      limit: 100,
     }),
     [debouncedSearch, filter, status, sortBy, sortOrder],
   );
@@ -76,8 +106,48 @@ export function TripsPage() {
     onError: (err: Error) => toast(err.message, 'error'),
   });
 
-  const activeFilterCount = (status ? 1 : 0) + (sortBy !== 'startDate' ? 1 : 0);
-  const trips = data?.items ?? [];
+  const trips = useMemo(() => data?.items ?? [], [data]);
+
+  const groups = useMemo(() => {
+    if (groupBy === 'none') return null;
+
+    if (groupBy === 'phase') {
+      const order: Array<keyof typeof PHASE_META> = ['ongoing', 'upcoming', 'completed'];
+      return order
+        .map((phase) => ({
+          key: phase as string,
+          label: PHASE_META[phase].label,
+          icon: PHASE_META[phase].icon,
+          trips: trips.filter((t) => phaseOf(t) === phase),
+        }))
+        .filter((g) => g.trips.length > 0);
+    }
+
+    const buckets = new Map<string, TripSummary[]>();
+    for (const trip of trips) {
+      const keys =
+        groupBy === 'status'
+          ? [TRIP_STATUS_LABELS[trip.status]]
+          : trip.cities.length
+            ? [...new Set(trip.cities)]
+            : ['No destinations yet'];
+      for (const key of keys) buckets.set(key, [...(buckets.get(key) ?? []), trip]);
+    }
+
+    return [...buckets.entries()]
+      .map(([key, items]) => ({ key, label: key, icon: undefined, trips: items }))
+      .sort((a, b) => b.trips.length - a.trips.length || a.label.localeCompare(b.label));
+  }, [trips, groupBy]);
+
+  const activeFilterCount = (status ? 1 : 0) + (filter !== 'all' ? 1 : 0);
+
+  const reset = () => {
+    setStatus(undefined);
+    setFilter('all');
+    setGroupBy('phase');
+    setSortBy('startDate');
+    setSortOrder('asc');
+  };
 
   return (
     <div className="space-y-6">
@@ -94,65 +164,60 @@ export function TripsPage() {
         </Button>
       </header>
 
-      {/* Search + filter controls */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <SearchBar
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search trips…"
-              aria-label="Search trips"
-              className="pl-10"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search trips…"
+        groupBy={groupBy}
+        groupOptions={GROUP_OPTIONS}
+        onGroupByChange={setGroupBy}
+        sortBy={sortBy}
+        sortOptions={SORT_OPTIONS}
+        onSortByChange={setSortBy}
+        sortOrder={sortOrder}
+        onSortOrderChange={setSortOrder}
+        activeFilterCount={activeFilterCount}
+        onResetFilters={reset}
+        resultCount={data?.total}
+        filters={
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium">Status</legend>
+            <div className="flex flex-wrap gap-2">
+              <Pill active={!status} onClick={() => setStatus(undefined)}>
+                Any
+              </Pill>
+              {STATUSES.map((value) => (
+                <Pill
+                  key={value}
+                  active={status === value}
+                  onClick={() => setStatus(status === value ? undefined : value)}
+                >
+                  {TRIP_STATUS_LABELS[value]}
+                </Pill>
+              ))}
+            </div>
+          </fieldset>
+        }
+      />
 
+      <div className="snap-x-rail -mx-4 px-4 md:mx-0 md:px-0">
+        {FILTERS.map((item) => (
           <button
-            onClick={() => setSheetOpen(true)}
+            key={item.value}
+            onClick={() => setFilter(item.value)}
             className={cn(
-              'touch-target relative flex items-center justify-center rounded-2xl border border-border px-3 transition-colors hover:bg-muted',
-              activeFilterCount > 0 && 'border-primary text-primary',
+              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              filter === item.value
+                ? 'bg-primary text-primary-foreground'
+                : 'glass text-muted-foreground hover:text-foreground',
             )}
-            aria-label="Filters and sorting"
+            aria-pressed={filter === item.value}
           >
-            <SlidersHorizontal className="h-5 w-5" />
-            {activeFilterCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-                {activeFilterCount}
-              </span>
-            )}
+            {item.label}
           </button>
-        </div>
-
-        <div className="snap-x-rail">
-          {FILTERS.map((item) => (
-            <button
-              key={item.value}
-              onClick={() => setFilter(item.value)}
-              className={cn(
-                'rounded-full px-4 py-2 text-sm font-medium transition-colors',
-                filter === item.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'glass text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
-      {/* Results */}
       {isLoading ? (
         <LoadingSkeleton count={4} />
       ) : isError ? (
@@ -170,16 +235,8 @@ export function TripsPage() {
               : 'Plan your first multi-city adventure.'
           }
           action={
-            debouncedSearch ? (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearch('');
-                  setFilter('all');
-                  setStatus(undefined);
-                }}
-                className="rounded-2xl"
-              >
+            debouncedSearch || activeFilterCount ? (
+              <Button variant="outline" onClick={reset} className="rounded-2xl">
                 Clear filters
               </Button>
             ) : (
@@ -190,108 +247,31 @@ export function TripsPage() {
             )
           }
         />
+      ) : groups ? (
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <section key={group.key} className="space-y-3">
+              <SectionHeader
+                title={group.label}
+                subtitle={`${group.trips.length} ${group.trips.length === 1 ? 'trip' : 'trips'}`}
+                icon={group.icon}
+              />
+              <TripGrid
+                trips={group.trips}
+                onOpen={(id) => navigate(`/trips/${id}`)}
+                onDelete={setPendingDelete}
+              />
+            </section>
+          ))}
+        </div>
       ) : (
-        <motion.div layout className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <AnimatePresence mode="popLayout">
-            {trips.map((trip) => (
-              <motion.div
-                key={trip.id}
-                layout
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                className="group relative"
-              >
-                <TripCard trip={trip} onClick={() => navigate(`/trips/${trip.id}`)} />
-
-                {trip.role === 'OWNER' && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDelete({ id: trip.id, name: trip.name });
-                    }}
-                    className="absolute right-3 top-3 z-10 rounded-full bg-black/40 p-2 text-white opacity-0 backdrop-blur-md transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-                    aria-label={`Delete ${trip.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+        <TripGrid
+          trips={trips}
+          onOpen={(id) => navigate(`/trips/${id}`)}
+          onDelete={setPendingDelete}
+        />
       )}
 
-      {/* Filter / sort sheet */}
-      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Filter & sort">
-        <div className="space-y-6 pb-2">
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium">Status</legend>
-            <div className="flex flex-wrap gap-2">
-              <FilterPill active={!status} onClick={() => setStatus(undefined)}>
-                Any
-              </FilterPill>
-              {STATUSES.map((value) => (
-                <FilterPill
-                  key={value}
-                  active={status === value}
-                  onClick={() => setStatus(status === value ? undefined : value)}
-                >
-                  {TRIP_STATUS_LABELS[value]}
-                </FilterPill>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium">Sort by</legend>
-            <div className="flex flex-wrap gap-2">
-              {SORTS.map((item) => (
-                <FilterPill
-                  key={item.value}
-                  active={sortBy === item.value}
-                  onClick={() => setSortBy(item.value)}
-                >
-                  {item.label}
-                </FilterPill>
-              ))}
-            </div>
-          </fieldset>
-
-          <button
-            onClick={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-            className="flex w-full items-center justify-between rounded-2xl border border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"
-          >
-            <span className="flex items-center gap-2">
-              <ArrowUpDown className="h-4 w-4" />
-              Order
-            </span>
-            <span className="text-muted-foreground">
-              {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-            </span>
-          </button>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 rounded-2xl"
-              onClick={() => {
-                setStatus(undefined);
-                setSortBy('startDate');
-                setSortOrder('asc');
-              }}
-            >
-              Reset
-            </Button>
-            <Button className="flex-1 rounded-2xl" onClick={() => setSheetOpen(false)}>
-              Show {trips.length} {trips.length === 1 ? 'trip' : 'trips'}
-            </Button>
-          </div>
-        </div>
-      </BottomSheet>
-
-      {/* Delete confirmation */}
       <BottomSheet
         open={!!pendingDelete}
         onClose={() => setPendingDelete(null)}
@@ -325,27 +305,45 @@ export function TripsPage() {
   );
 }
 
-function FilterPill({
-  active,
-  onClick,
-  children,
+function TripGrid({
+  trips,
+  onOpen,
+  onDelete,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  trips: TripSummary[];
+  onOpen: (id: string) => void;
+  onDelete: (trip: { id: string; name: string }) => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'rounded-full px-4 py-2 text-sm font-medium transition-colors',
-        active
-          ? 'bg-primary text-primary-foreground'
-          : 'border border-border text-muted-foreground hover:text-foreground',
-      )}
-      aria-pressed={active}
-    >
-      {children}
-    </button>
+    <motion.div layout className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <AnimatePresence mode="popLayout">
+        {trips.map((trip) => (
+          <motion.div
+            key={trip.id}
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="group relative"
+          >
+            <TripCard trip={trip} onClick={() => onOpen(trip.id)} />
+
+            {trip.role === 'OWNER' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete({ id: trip.id, name: trip.name });
+                }}
+                className="absolute right-3 top-3 z-10 rounded-full bg-black/40 p-2 text-white opacity-0 backdrop-blur-md transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                aria-label={`Delete ${trip.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </motion.div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, Loader2, MapPin, Search } from 'lucide-react';
+import { BedDouble, Check, Loader2, MapPin, Sparkles, TrendingUp, Utensils } from 'lucide-react';
 import { searchCities } from '@/services/city';
+import { estimateStop } from '@/services/estimate';
 import { createStop } from '@/services/stop';
 import { BottomSheet } from '@/components/BottomSheet';
 import { SearchBar } from '@/components/SearchBar';
@@ -10,9 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useToast } from '@/hooks/use-toast';
-import { costLevel, fallbackImage } from '@/lib/format';
+import { costLevel, fallbackImage, formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { City, TripDetail } from '@/types';
+import type { City, ComfortTier, TripDetail } from '@/types';
 
 interface AddStopSheetProps {
   open: boolean;
@@ -39,9 +40,7 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
 
   const [arrivalDate, setArrivalDate] = useState(defaultArrival);
   const [departureDate, setDepartureDate] = useState(trip.endDate);
-  const [accommodationCost, setAccommodationCost] = useState('');
-  const [transportCost, setTransportCost] = useState('');
-  const [mealsPerDayCost, setMealsPerDayCost] = useState('');
+  const [tier, setTier] = useState<ComfortTier>('MID');
 
   // Reset whenever the sheet reopens, so a previous attempt never leaks in.
   useEffect(() => {
@@ -50,15 +49,32 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
     setSelected(null);
     setArrivalDate(defaultArrival);
     setDepartureDate(trip.endDate);
-    setAccommodationCost('');
-    setTransportCost('');
-    setMealsPerDayCost('');
+    setTier('MID');
   }, [open, defaultArrival, trip.endDate]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['cities', { search: debounced }],
     queryFn: () => searchCities({ search: debounced || undefined, limit: 20 }),
     enabled: open,
+  });
+
+  /**
+   * Live cost estimate for the chosen city, dates and comfort level. This is
+   * what removes the guesswork — the traveller picks a tier and the nightly
+   * rate, meals and the transport leg from the previous stop all follow.
+   */
+  const estimate = useQuery({
+    queryKey: ['estimate', selected?.id, arrivalDate, departureDate, trip.travelers, tier, lastStop?.city.id],
+    queryFn: () =>
+      estimateStop({
+        cityId: selected!.id,
+        arrivalDate,
+        departureDate,
+        travelers: trip.travelers,
+        tier,
+        fromCityId: lastStop?.city.id,
+      }),
+    enabled: !!selected && !!arrivalDate && !!departureDate,
   });
 
   const dateError = useMemo(() => {
@@ -78,9 +94,10 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
         cityId: selected!.id,
         arrivalDate,
         departureDate,
-        accommodationCost: accommodationCost ? Number(accommodationCost) : 0,
-        transportCost: transportCost ? Number(transportCost) : 0,
-        mealsPerDayCost: mealsPerDayCost ? Number(mealsPerDayCost) : 0,
+        // Costs come from the engine rather than the keyboard.
+        accommodationCost: estimate.data?.suggested.accommodationCost ?? 0,
+        transportCost: estimate.data?.suggested.transportCost ?? 0,
+        mealsPerDayCost: estimate.data?.suggested.mealsPerDayCost ?? 0,
       }),
     onSuccess: () => {
       onCreated();
@@ -98,17 +115,13 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
     >
       {!selected ? (
         <div className="space-y-4 pb-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <SearchBar
+          <SearchBar
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search cities or countries…"
               aria-label="Search cities"
-              className="pl-10"
               autoFocus
-            />
-          </div>
+          />
 
           <div className="max-h-[45vh] space-y-2 overflow-y-auto">
             {isLoading ? (
@@ -196,30 +209,80 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <CostField
-              id="stop-transport"
-              label="Transport"
-              value={transportCost}
-              onChange={setTransportCost}
-            />
-            <CostField
-              id="stop-stay"
-              label="Stay"
-              value={accommodationCost}
-              onChange={setAccommodationCost}
-            />
-            <CostField
-              id="stop-meals"
-              label="Meals/day"
-              value={mealsPerDayCost}
-              onChange={setMealsPerDayCost}
-            />
+          {/* Comfort level — drives every number below it */}
+          <div className="space-y-2">
+            <Label>Comfort level</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['BUDGET', 'MID', 'LUXURY'] as ComfortTier[]).map((option) => {
+                const band = estimate.data?.accommodation.options.find((o) => o.tier === option);
+                return (
+                  <button
+                    key={option}
+                    onClick={() => setTier(option)}
+                    className={cn(
+                      'rounded-2xl border px-2 py-2.5 text-center transition-colors',
+                      tier === option
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted',
+                    )}
+                    aria-pressed={tier === option}
+                  >
+                    <span className="block text-xs font-semibold capitalize">
+                      {option.toLowerCase()}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] tabular-nums text-muted-foreground">
+                      {band ? `${formatMoney(band.nightlyRate, trip.currency)}/night` : '—'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Meals are per person, per day. Everything is in {trip.currency}.
-          </p>
+          {/* What that works out to */}
+          {estimate.isLoading ? (
+            <div className="h-28 animate-pulse rounded-2xl bg-muted" />
+          ) : estimate.data ? (
+            <div className="space-y-2 rounded-2xl border border-border p-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Estimated automatically
+                </span>
+                <span className="text-muted-foreground">{estimate.data.season.label}</span>
+              </div>
+
+              <EstimateRow
+                icon={BedDouble}
+                label={`Stay · ${estimate.data.nights} ${estimate.data.nights === 1 ? 'night' : 'nights'} × ${estimate.data.rooms} room${estimate.data.rooms === 1 ? '' : 's'}`}
+                value={formatMoney(estimate.data.accommodation.total, trip.currency)}
+              />
+              <EstimateRow
+                icon={Utensils}
+                label={`Meals · ${estimate.data.days} days × ${estimate.data.travelers}`}
+                value={formatMoney(estimate.data.meals.total, trip.currency)}
+              />
+              {estimate.data.transport && (
+                <EstimateRow
+                  icon={TrendingUp}
+                  label={`${estimate.data.transport.fromCity} → ${selected.name} · ${estimate.data.transport.distanceKm}km by ${estimate.data.transport.mode.toLowerCase()}`}
+                  value={formatMoney(estimate.data.transport.total, trip.currency)}
+                />
+              )}
+
+              <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold">
+                <span>Total for this stop</span>
+                <span className="tabular-nums">
+                  {formatMoney(estimate.data.total, trip.currency)}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Based on typical {selected.name} rates for this time of year. You can adjust any
+                figure later from the builder.
+              </p>
+            </div>
+          ) : null}
 
           {dateError && (
             <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
@@ -230,7 +293,7 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
           <Button
             className="w-full rounded-2xl"
             size="lg"
-            disabled={!!dateError || mutation.isPending}
+            disabled={!!dateError || mutation.isPending || estimate.isLoading}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? (
@@ -251,32 +314,20 @@ export function AddStopSheet({ open, onClose, trip, onCreated }: AddStopSheetPro
   );
 }
 
-function CostField({
-  id,
+function EstimateRow({
+  icon: Icon,
   label,
   value,
-  onChange,
 }: {
-  id: string;
+  icon: typeof BedDouble;
   label: string;
   value: string;
-  onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
-      <Input
-        id={id}
-        type="number"
-        inputMode="decimal"
-        min={0}
-        placeholder="0"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn('rounded-2xl')}
-      />
+    <div className="flex items-center gap-2 text-xs">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">{label}</span>
+      <span className="shrink-0 font-medium tabular-nums">{value}</span>
     </div>
   );
 }

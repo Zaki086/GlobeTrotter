@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, Clock, Loader2, Search } from 'lucide-react';
+import { Check, Clock, Loader2 } from 'lucide-react';
 import { searchActivities } from '@/services/activity';
 import { addStopActivity } from '@/services/stop';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -105,16 +105,12 @@ export function AddActivitySheet({
     >
       {!selected ? (
         <div className="space-y-4 pb-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <SearchBar
+          <SearchBar
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search activities…"
               aria-label="Search activities"
-              className="pl-10"
-            />
-          </div>
+          />
 
           <div className="snap-x-rail">
             <button

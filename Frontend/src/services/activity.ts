@@ -1,4 +1,4 @@
-import { USE_MOCK, request, delay } from '@/lib/api';
+import { USE_MOCK, request, requestPaginated, delay } from '@/lib/api';
 import { mockActivities } from '@/services/mock-data';
 import type { Activity, ListActivitiesQuery, Paginated } from '@/types';
 
@@ -38,8 +38,7 @@ export async function searchActivities(
     const start = (page - 1) * limit;
     return { items: items.slice(start, start + limit), total: items.length };
   }
-  return request<Paginated<Activity>>({
-    method: 'GET',
+  return requestPaginated<Activity>({
     url: '/activities',
     params: query as Record<string, unknown>,
   });
