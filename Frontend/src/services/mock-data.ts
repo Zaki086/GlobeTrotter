@@ -2,7 +2,6 @@ import {
   addDays,
   differenceInCalendarDays,
   format,
-  isWithinInterval,
   parseISO,
   startOfDay,
 } from 'date-fns';
@@ -26,7 +25,6 @@ import type {
   StopActivity,
   TripCalendar,
   TripDetail,
-  TripMemberRole,
   TripStatus,
   Budget,
 } from '@/types';
@@ -250,15 +248,14 @@ export const mockCurrentUser: PublicUser = {
   id: 'user-1',
   name: 'Alex Wanderer',
   email: 'alex@example.com',
-  role: 'USER',
+  role: 'ADMIN',
   emailVerified: true,
   createdAt: '2025-01-15T10:00:00.000Z',
   lastLoginAt: TODAY.toISOString(),
 };
 
 export const mockProfile: Profile = {
-  id: 'profile-1',
-  userId: mockCurrentUser.id,
+  id: mockCurrentUser.id,
   name: mockCurrentUser.name,
   email: mockCurrentUser.email,
   role: mockCurrentUser.role,
@@ -440,7 +437,7 @@ export const mockTrips: TripDetail[] = [
   ),
 ];
 
-function computeBudget(trip: TripDetail): TripDetail {
+export function computeBudget(trip: TripDetail): TripDetail {
   let transport = 0;
   let stay = 0;
   let meals = 0;

@@ -1,5 +1,5 @@
 import { USE_MOCK, request, delay } from '@/lib/api';
-import { getPublicItinerary, mockTrips, getTripById, computeBudget } from '@/services/mock-data';
+import { getPublicItinerary, mockTrips, computeBudget } from '@/services/mock-data';
 import type { CopyTripInput, PublicItinerary } from '@/types';
 
 export async function getSharedItinerary(slug: string): Promise<PublicItinerary> {

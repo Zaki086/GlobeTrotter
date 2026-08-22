@@ -27,6 +27,8 @@ export interface PaginationMeta {
   limit: number;
   total: number;
   totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -53,29 +55,39 @@ export interface PublicUser {
   lastLoginAt: string | null;
 }
 
+/** GET /auth/me — the user with its raw profile row attached. */
 export interface UserProfile extends PublicUser {
-  profile: {
-    id: string;
-    userId: string;
-    avatarUrl: string | null;
-    bio: string | null;
-    language: string;
-    currency: string;
-    country: string | null;
-    phone: string | null;
-    savedDestinations: string[];
-    createdAt: string;
-    updatedAt: string;
-  } | null;
+  profile: ProfileRecord | null;
   stats: {
     tripCount: number;
     activeSessions: number;
   };
 }
 
-export interface Profile {
+/** The raw `profiles` row, as embedded by /auth/me and the admin user detail. */
+export interface ProfileRecord {
   id: string;
   userId: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  language: string;
+  currency: string;
+  country: string | null;
+  phone: string | null;
+  savedDestinations: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /profile — the user and profile flattened, with cities hydrated. */
+export interface Profile {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  emailVerified: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
   avatarUrl: string | null;
   bio: string | null;
   language: string;
@@ -87,6 +99,17 @@ export interface Profile {
     tripCount: number;
     sharedItineraries: number;
   };
+}
+
+export interface UpdateProfileInput {
+  name?: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  language?: string;
+  currency?: string;
+  country?: string | null;
+  phone?: string | null;
+  savedDestinations?: string[];
 }
 
 export interface SavedDestination {
@@ -227,8 +250,28 @@ export interface TripSummary {
   updatedAt: string;
 }
 
-export interface TripDetail extends Omit<TripSummary, 'role' | 'createdAt' | 'updatedAt'> {
-  owner: PublicUser;
+/**
+ * GET /trips/:id.
+ *
+ * Deliberately NOT derived from TripSummary: the detail endpoint returns the
+ * full `stops` array instead of the summary's rollups (stopCount, cities,
+ * estimatedTotal, …), so extending TripSummary would demand fields the
+ * backend never sends.
+ */
+export interface TripDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  coverImageUrl: string | null;
+  startDate: string;
+  endDate: string;
+  durationDays: number;
+  daysUntilStart: number;
+  travelers: number;
+  currency: string;
+  status: TripStatus;
+  isPublic: boolean;
+  owner: Pick<PublicUser, 'id' | 'name' | 'email'>;
   role: TripMemberRole;
   canEdit: boolean;
   createdAt: string;
@@ -238,6 +281,7 @@ export interface TripDetail extends Omit<TripSummary, 'role' | 'createdAt' | 'up
   budget: {
     currency: string;
     plannedTotal: number | null;
+    dailyLimit?: number | null;
     grandTotal: number;
     perDayAverage: number;
     lastCalculatedAt: string;
@@ -717,7 +761,7 @@ export interface AdminUserListItem {
 export interface AdminUserDetail extends PublicUser {
   isActive: boolean;
   emailVerified: boolean;
-  profile: Profile['profile'] | null;
+  profile: ProfileRecord | null;
   trips: {
     id: string;
     name: string;
@@ -738,8 +782,10 @@ export interface ListTripsQuery {
   limit?: number;
   search?: string;
   status?: TripStatus;
-  filter?: 'upcoming' | 'past' | 'ongoing';
-  sortBy?: 'startDate' | 'updatedAt' | 'createdAt' | 'name';
+  filter?: 'all' | 'upcoming' | 'past' | 'ongoing';
+  /** Mirrors the backend enum exactly — `updatedAt` is not a valid sort key
+   *  there and would be rejected with a 422. */
+  sortBy?: 'startDate' | 'createdAt' | 'name';
   sortOrder?: 'asc' | 'desc';
 }
 

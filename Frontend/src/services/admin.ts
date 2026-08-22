@@ -141,7 +141,7 @@ export async function getUser(userId: string): Promise<AdminUserDetail> {
       role: 'ADMIN',
       isActive: true,
       emailVerified: true,
-      profile: mockProfile.profile ?? null,
+      profile: null,
       trips: mockTrips.map((t) => ({
         id: t.id,
         name: t.name,

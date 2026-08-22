@@ -1,6 +1,6 @@
 import { USE_MOCK, request, delay } from '@/lib/api';
 import { mockActivities } from '@/services/mock-data';
-import type { Activity, ActivityType, ListActivitiesQuery, Paginated } from '@/types';
+import type { Activity, ListActivitiesQuery, Paginated } from '@/types';
 
 export async function searchActivities(
   query: ListActivitiesQuery = {},
