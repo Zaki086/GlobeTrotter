@@ -105,6 +105,9 @@ model User {
   sharedLinks   SharedItinerary[]
   expenses      Expense[]           @relation("ExpenseCreator")
   resetTokens   PasswordResetToken[]
+  posts         CommunityPost[]
+  postLikes     CommunityLike[]
+  postComments  CommunityComment[]
 
   @@index([role])
   @@index([createdAt])
@@ -205,11 +208,29 @@ model City {
   currency    String   @db.VarChar(3)
   description String?  @db.Text
   imageUrl    String?  @map("image_url") @db.Text
+
+  // --- Live cost model -----------------------------------------------------
+  // Typical nightly rates for one room, in `currency`. These drive the
+  // automatic stay estimate so a traveller picks a comfort level rather than
+  // typing a number. Seeded per city from real market bands.
+  stayBudget  Int @default(1200) @map("stay_budget")
+  stayMid     Int @default(3500) @map("stay_mid")
+  stayLuxury  Int @default(9000) @map("stay_luxury")
+
+  /// Per person, per day food estimates at the same three comfort levels.
+  mealBudget  Int @default(400) @map("meal_budget")
+  mealMid     Int @default(900) @map("meal_mid")
+  mealLuxury  Int @default(2200) @map("meal_luxury")
+
+  /// Months (1-12) when demand peaks — used for the seasonal multiplier.
+  peakMonths  Int[] @default([]) @map("peak_months")
+
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   activities Activity[]
   stops      Stop[]
+  posts      CommunityPost[]
 
   @@unique([name, country])
   @@index([country])
@@ -269,6 +290,7 @@ model Trip {
   budget   Budget?
   expenses Expense[]
   shares   SharedItinerary[]
+  posts    CommunityPost[]
 
   @@index([ownerId])
   @@index([startDate])
@@ -472,4 +494,72 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Community (Screen 10)
+// ---------------------------------------------------------------------------
+
+/// A traveler's public write-up about a trip, city or activity. Optionally
+/// linked to the trip it came from so readers can open the full itinerary.
+model CommunityPost {
+  id         String   @id @default(uuid()) @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  /// Optional context — a post can be about a trip, a city, or neither.
+  tripId     String?  @map("trip_id") @db.Uuid
+  cityId     String?  @map("city_id") @db.Uuid
+  title      String   @db.VarChar(180)
+  body       String   @db.Text
+  imageUrl   String?  @map("image_url") @db.Text
+  /// Free-form tags for the "group by" and filter controls.
+  tags       String[] @default([])
+  /// 1-5 stars; null when the post is a story rather than a review.
+  rating     Int?
+  likeCount  Int      @default(0) @map("like_count")
+  commentCount Int    @default(0) @map("comment_count")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  author   User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  trip     Trip?              @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  city     City?              @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  likes    CommunityLike[]
+  comments CommunityComment[]
+
+  @@index([authorId])
+  @@index([cityId])
+  @@index([createdAt])
+  @@map("community_posts")
+}
+
+/// One like per user per post — the unique index is what makes it a toggle
+/// rather than a counter anyone can inflate.
+model CommunityLike {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_likes")
+}
+
+model CommunityComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String   @db.VarChar(2000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  post   CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@map("community_comments")
 }

@@ -12,8 +12,8 @@ Relational schema for the GlobeTrotter travel planning platform.
 | --- | --- |
 | `schema.prisma` | Full Prisma model definitions (mirror) |
 | `migrations/` | Ordered SQL migrations applied by `prisma migrate deploy` |
-| `seed.ts` | Seed script — 58 cities, 232 activities, demo users and trips |
-| `data/cities.ts` | Static reference dataset (cities + curated activities) |
+| `seed.ts` | Seed script — 61 cities, 263 activities, demo users and trips |
+| `data/india.ts` | Static reference dataset (Indian cities + curated attractions) |
 
 ---
 
@@ -58,6 +58,13 @@ erDiagram
     stops ||--o{ stop_activities : schedules
     stops ||--o{ expenses : "attributed to"
     activities ||--o{ stop_activities : "scheduled as"
+
+    users ||--o{ community_posts : writes
+    users ||--o{ community_likes : gives
+    users ||--o{ community_comments : writes
+    cities ||--o{ community_posts : "tagged in"
+    community_posts ||--o{ community_likes : receives
+    community_posts ||--o{ community_comments : receives
 ```
 
 ## Tables
@@ -85,8 +92,15 @@ erDiagram
 
 | Table | Notes |
 | --- | --- |
-| `cities` | Seeded catalog. `cost_index` (0-100) drives budget estimates and the cost filter; `popularity` drives recommendations. Unique on `(name, country)`. |
-| `activities` | Catalog of things to do, each belonging to one city. Unique on `(city_id, name)`. |
+| `cities` | Seeded catalog of 61 Indian destinations. `cost_index` (0-100) drives the cost filter and is scaled *within India* (Mumbai 85, Orchha 26) so the filter stays discriminating; `popularity` drives recommendations. Unique on `(name, country)`. |
+| `activities` | Catalog of 263 real attractions, each belonging to one city, priced in INR at genuine entry-fee and tour rates. Unique on `(city_id, name)`. |
+
+`cities` also carries the **rate bands the cost engine prices from** — three
+nightly accommodation rates (`stay_budget` / `stay_mid` / `stay_luxury`), three
+per-day meal rates, and `peak_months`, the months that destination is actually
+in season. These are ordinary editable columns rather than constants in code
+because an admin tunes them from the console, and because they are the seam
+where a live pricing provider would be substituted later.
 
 ### Money
 
@@ -102,6 +116,14 @@ erDiagram
 | `shared_itineraries` | Public read-only links. `slug` is generated from a CSPRNG (31^12 keyspace), not a sequential id, because it is the only thing protecting an unlisted itinerary. |
 | `notifications` | In-app messages; `data` is a JSON payload for client deep-linking. |
 | `audit_logs` | Append-only trail of auth, trip and admin actions. |
+
+### Community
+
+| Table | Notes |
+| --- | --- |
+| `community_posts` | Travel writeups, optionally tagged to a city and carrying a rating. `like_count` and `comment_count` are denormalised for feed ordering and are written in the same transaction as the like or comment row, so they cannot drift from the truth. |
+| `community_likes` | Unique on `(post_id, user_id)` — the database, not the client, is what makes a like idempotent. |
+| `community_comments` | Threaded under a post; deleted with it. |
 
 ## Cascade policy
 
@@ -136,6 +158,8 @@ actually filters and sorts by:
 - `activities (type)`, `(popularity)` — activity search.
 - `audit_logs (actor_id)`, `(action)`, `(created_at)` — the admin audit view.
 - `notifications (user_id, read_at)` — the unread badge count.
+- `community_posts (author_id)`, `(city_id)`, `(created_at)` — the feed and its
+  group-by-destination and group-by-traveller views.
 
 ## Running it
 
@@ -150,8 +174,19 @@ npx prisma studio            # browse the data
 To regenerate this mirror after a schema change:
 
 ```bash
-cp Backend/prisma/schema.prisma      Database/schema.prisma
-cp -r Backend/prisma/migrations      Database/
-cp Backend/prisma/seed.ts            Database/seed.ts
-cp Backend/prisma/data/cities.ts     Database/data/cities.ts
+cp Backend/prisma/schema.prisma  Database/schema.prisma
+cp Backend/prisma/seed.ts        Database/seed.ts
+cp Backend/prisma/data/india.ts  Database/data/india.ts
+rsync -a --delete Backend/prisma/migrations/ Database/migrations/
 ```
+
+`rsync --delete` rather than `cp -r`, so a migration renamed or removed upstream
+does not linger here and make the mirror look like a different history.
+
+### Re-seeding over an existing database
+
+The seed is idempotent, but replacing the catalog is not a plain upsert: a city
+cannot be deleted while a stop still references it (`ON DELETE RESTRICT`, above).
+`purgeLegacyCatalog()` therefore removes trips built on departing cities *first*,
+then the cities, and finally prunes attractions that a surviving city no longer
+lists — otherwise stale rows outlive the dataset that introduced them.
