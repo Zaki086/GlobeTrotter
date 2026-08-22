@@ -172,19 +172,25 @@ export class ItineraryService {
     const dates = enumerateDates(trip.startDate, trip.endDate);
 
     return dates.map((date, index) => {
-      // The stop whose date range covers this day; earlier stops win on the
-      // shared transfer day so an arrival reads as "you are now in X".
+      // On a transfer day two stops share the date — the one you leave and the
+      // one you arrive at. Both must contribute activities, otherwise the
+      // arriving stop's plans silently vanish from the timeline and the day
+      // costs disagree with the budget.
+      const covering = trip.stops.filter((s) => isWithinRange(date, s.arrivalDate, s.departureDate));
+
+      // The day is labelled with the city you end it in, so a transfer day
+      // reads as "you are now in X".
       const stop =
-        trip.stops.find((s) => isWithinRange(date, s.arrivalDate, s.departureDate)) ?? null;
+        covering.find((s) => toDateString(s.arrivalDate) === date) ?? covering[0] ?? null;
 
       const activities: ItineraryActivityBlock[] = [];
 
-      if (stop) {
-        for (const sa of stop.activities) {
+      for (const current of covering) {
+        for (const sa of current.activities) {
           const scheduled = sa.scheduledDate ? toDateString(sa.scheduledDate) : null;
-          // Unscheduled activities surface on the stop's arrival day so they
+          // Unscheduled activities surface on their stop's arrival day so they
           // are never invisible in the timeline.
-          const effectiveDate = scheduled ?? toDateString(stop.arrivalDate);
+          const effectiveDate = scheduled ?? toDateString(current.arrivalDate);
           if (effectiveDate !== date) continue;
 
           activities.push({
@@ -229,8 +235,9 @@ export class ItineraryService {
             }
           : null,
         stopId: stop?.id ?? null,
-        isArrivalDay: stop ? toDateString(stop.arrivalDate) === date : false,
-        isDepartureDay: stop ? toDateString(stop.departureDate) === date : false,
+        // A transfer day is both — you leave one city and arrive in the next.
+        isArrivalDay: covering.some((s) => toDateString(s.arrivalDate) === date),
+        isDepartureDay: covering.some((s) => toDateString(s.departureDate) === date),
         activities,
         dayCost: Number(dayCost.toFixed(2)),
         totalMinutes,
