@@ -6,6 +6,17 @@ import { logger } from '../config/logger';
 import { ApiError } from '../utils/ApiError';
 
 /**
+ * Any http(s)://localhost:PORT or http(s)://127.0.0.1:PORT origin.
+ *
+ * Dev servers pick whatever port is free — Vite moves to 5174, 5199, … when
+ * 5173 is taken — so pinning the whitelist to one port means the browser
+ * blocks the preflight and the client reports a bare "Network Error" with
+ * nothing useful in it. Matching any loopback port in development removes a
+ * whole class of confusing local-setup failures.
+ */
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+/**
  * CORS whitelist. Requests with no Origin (curl, mobile apps, server-to-server)
  * are allowed because CORS is a browser-enforced policy and blocking them buys
  * nothing; browser origins must appear in CORS_ORIGINS.
@@ -16,9 +27,12 @@ const corsOptions: CorsOptions = {
 
     if (env.corsOrigins.includes(origin)) return callback(null, true);
 
-    // "*" is honoured only in development so a misconfigured prod deploy
-    // cannot silently open up to the world.
-    if (env.isDevelopment && env.corsOrigins.includes('*')) return callback(null, true);
+    // Development-only conveniences. Both are gated on NODE_ENV so a
+    // misconfigured production deploy cannot silently open up to the world.
+    if (env.isDevelopment) {
+      if (env.corsOrigins.includes('*')) return callback(null, true);
+      if (LOOPBACK_ORIGIN.test(origin)) return callback(null, true);
+    }
 
     logger.warn('Blocked CORS origin', { origin });
     return callback(new ApiError(403, `Origin ${origin} is not allowed by CORS policy`));
