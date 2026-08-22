@@ -1,5 +1,5 @@
 import { USE_MOCK, request, delay } from '@/lib/api';
-import { getBudget, mockTrips, getTripById, mockExpenses, computeBudget } from '@/services/mock-data';
+import { getBudget, getTripById, mockExpenses, computeBudget } from '@/services/mock-data';
 import type {
   Budget,
   CreateExpenseInput,

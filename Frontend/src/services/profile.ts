@@ -1,6 +1,11 @@
 import { USE_MOCK, request, delay } from '@/lib/api';
 import { mockProfile, mockCities } from '@/services/mock-data';
-import type { Notification, Profile, SavedDestination } from '@/types';
+import type {
+  Notification,
+  Profile,
+  SavedDestination,
+  UpdateProfileInput,
+} from '@/types';
 
 export async function getProfile(): Promise<Profile> {
   if (USE_MOCK) {
@@ -10,7 +15,7 @@ export async function getProfile(): Promise<Profile> {
   return request<Profile>({ method: 'GET', url: '/profile' });
 }
 
-export async function updateProfile(input: Partial<Profile>): Promise<Profile> {
+export async function updateProfile(input: UpdateProfileInput): Promise<Profile> {
   if (USE_MOCK) {
     await delay();
     Object.assign(mockProfile, input);
@@ -25,7 +30,12 @@ export async function deleteProfile(password: string): Promise<void> {
     if (password !== 'password') throw new Error('Incorrect password');
     return;
   }
-  await request<void>({ method: 'DELETE', url: '/profile', data: { password } });
+  // The backend requires a typed confirmation alongside the password.
+  await request<void>({
+    method: 'DELETE',
+    url: '/profile',
+    data: { password, confirm: 'DELETE' },
+  });
 }
 
 export async function addSavedDestination(cityId: string): Promise<Profile> {
@@ -59,12 +69,19 @@ export async function removeSavedDestination(cityId: string): Promise<Profile> {
   return request<Profile>({ method: 'DELETE', url: `/profile/saved-destinations/${cityId}` });
 }
 
-export async function listNotifications(): Promise<Notification[]> {
+/** The backend nests notifications as `{ items, unreadCount }`. */
+export async function listNotifications(): Promise<{
+  items: Notification[];
+  unreadCount: number;
+}> {
   if (USE_MOCK) {
     await delay();
-    return [];
+    return { items: [], unreadCount: 0 };
   }
-  return request<Notification[]>({ method: 'GET', url: '/profile/notifications' });
+  return request<{ items: Notification[]; unreadCount: number }>({
+    method: 'GET',
+    url: '/profile/notifications',
+  });
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

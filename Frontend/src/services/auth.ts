@@ -1,5 +1,4 @@
-import { USE_MOCK, request } from '@/lib/api';
-import { delay } from '@/lib/api';
+import { USE_MOCK, request, delay, tokenStore } from '@/lib/api';
 import { mockCurrentUser } from '@/services/mock-data';
 import type {
   AuthResult,
@@ -10,15 +9,10 @@ import type {
   TokenPair,
 } from '@/types';
 
-function saveTokens(tokens: TokenPair): void {
-  localStorage.setItem('accessToken', tokens.accessToken);
-  localStorage.setItem('refreshToken', tokens.refreshToken);
-}
-
-function clearTokens(): void {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-}
+// Token persistence lives in one place (lib/api) so the axios interceptors
+// and these calls can never disagree about the storage keys.
+const saveTokens = (tokens: TokenPair): void => tokenStore.set(tokens);
+const clearTokens = (): void => tokenStore.clear();
 
 function fakeTokens(): TokenPair {
   return {
@@ -63,7 +57,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 }
 
 export async function refresh(): Promise<AuthResult> {
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken = tokenStore.getRefresh();
   if (USE_MOCK) {
     await delay();
     const tokens = fakeTokens();
@@ -80,7 +74,7 @@ export async function refresh(): Promise<AuthResult> {
 }
 
 export async function logout(): Promise<void> {
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken = tokenStore.getRefresh();
   if (USE_MOCK) {
     await delay();
     clearTokens();

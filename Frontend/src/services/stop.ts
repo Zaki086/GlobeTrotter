@@ -1,5 +1,5 @@
 import { USE_MOCK, request, delay } from '@/lib/api';
-import { mockTrips, getTripById, computeBudget, mockActivities } from '@/services/mock-data';
+import { mockTrips, getTripById, computeBudget, mockActivities, mockCities } from '@/services/mock-data';
 import type {
   AddStopActivityInput,
   CreateStopInput,
@@ -15,7 +15,7 @@ export async function createStop(tripId: string, input: CreateStopInput): Promis
     await delay();
     const trip = getTripById(tripId);
     if (!trip) throw new Error('Trip not found');
-    const city = trip.stops.find((s) => s.city.id === input.cityId)?.city;
+    const city = mockCities.find((c) => c.id === input.cityId);
     if (!city) throw new Error('City not found');
     const stop: Stop = {
       id: `stop-${Date.now()}`,
