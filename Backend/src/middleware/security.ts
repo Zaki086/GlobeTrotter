@@ -17,6 +17,16 @@ import { ApiError } from '../utils/ApiError';
 const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 /**
+ * Private-network origins (RFC 1918) plus link-local.
+ *
+ * When the app is served from a laptop and opened on a phone, the browser's
+ * Origin is the machine's LAN address, not localhost — so loopback alone is
+ * not enough for real device testing. Still development-only.
+ */
+const PRIVATE_NETWORK_ORIGIN =
+  /^https?:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+/**
  * CORS whitelist. Requests with no Origin (curl, mobile apps, server-to-server)
  * are allowed because CORS is a browser-enforced policy and blocking them buys
  * nothing; browser origins must appear in CORS_ORIGINS.
@@ -32,6 +42,7 @@ const corsOptions: CorsOptions = {
     if (env.isDevelopment) {
       if (env.corsOrigins.includes('*')) return callback(null, true);
       if (LOOPBACK_ORIGIN.test(origin)) return callback(null, true);
+      if (PRIVATE_NETWORK_ORIGIN.test(origin)) return callback(null, true);
     }
 
     logger.warn('Blocked CORS origin', { origin });

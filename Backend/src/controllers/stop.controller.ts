@@ -70,3 +70,18 @@ export const removeStopActivity = asyncHandler(async (req, res) => {
   );
   return sendSuccess(res, {}, 'Activity removed from stop');
 });
+
+/**
+ * Sets a stop's length in nights. The departure date and every later stop
+ * shift to match, and costs are re-derived — the "stay 1 day and the
+ * departure follows" behaviour.
+ */
+export const setStopNights = asyncHandler(async (req, res) => {
+  const stops = await StopService.setNights(
+    req.params.id,
+    req.auth!.userId,
+    req.body.nights,
+    contextOf(req),
+  );
+  return sendSuccess(res, stops, 'Itinerary dates updated');
+});

@@ -1,11 +1,37 @@
 import { z } from 'zod';
-import { email, password, personName } from './common.validator';
+import { email, httpUrl, password, personName } from './common.validator';
 
-export const signupSchema = z.object({
-  name: personName,
-  email,
-  password,
-});
+/**
+ * Registration (wireframe screen 2) collects more than a display name: first
+ * and last name, phone, city and country, plus a free-text note. `name` stays
+ * the canonical display field — it is composed from the two name parts when
+ * they are supplied, so existing clients that only send `name` still work.
+ */
+export const signupSchema = z
+  .object({
+    name: personName.optional(),
+    firstName: z.string().trim().min(1).max(60).optional(),
+    lastName: z.string().trim().min(1).max(60).optional(),
+    email,
+    password,
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\+?[0-9 ()-]{6,30}$/, 'Must be a valid phone number')
+      .optional(),
+    city: z.string().trim().max(80).optional(),
+    country: z.string().trim().max(80).optional(),
+    avatarUrl: httpUrl.optional(),
+    additionalInfo: z.string().trim().max(500).optional(),
+  })
+  .refine((data) => !!data.name || !!(data.firstName && data.lastName), {
+    message: 'Provide either a full name, or both a first and last name',
+    path: ['name'],
+  })
+  .transform((data) => ({
+    ...data,
+    name: data.name ?? `${data.firstName} ${data.lastName}`.trim(),
+  }));
 
 export const loginSchema = z.object({
   email,

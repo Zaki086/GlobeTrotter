@@ -13,6 +13,7 @@ import {
   stopActivityParamsSchema,
   updateStopActivitySchema,
 } from '../validators/activity.validator';
+import { setNightsSchema } from '../validators/estimate.validator';
 
 const router = Router();
 
@@ -27,6 +28,15 @@ router.patch(
 );
 
 router.get('/:id', validate({ params: stopIdParamSchema }), controller.getStop);
+
+// Nights drives the dates, so it gets its own endpoint rather than being a
+// plain field update — one call re-flows the whole downstream itinerary.
+router.patch(
+  '/:id/nights',
+  rateLimiters.write,
+  validate({ params: stopIdParamSchema, body: setNightsSchema }),
+  controller.setStopNights,
+);
 router.patch(
   '/:id',
   rateLimiters.write,

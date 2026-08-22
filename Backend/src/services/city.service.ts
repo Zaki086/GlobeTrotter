@@ -149,27 +149,24 @@ export class CityService {
 
     const cities = await prisma.city.findMany({
       where: { id: { in: grouped.map((g) => g.cityId) } },
+      include: { _count: { select: { activities: true } } },
     });
     const cityById = new Map(cities.map((c) => [c.id, c]));
 
+    // Returns the full City shape plus tripCount. It previously returned a
+    // trimmed object without costIndex or activityCount, so any screen that
+    // rendered these alongside search results showed a blank activity count
+    // and defaulted every city to the top cost band.
     return grouped
       .map((g) => {
         const city = cityById.get(g.cityId);
         if (!city) return null;
-        return {
-          id: city.id,
-          name: city.name,
-          country: city.country,
-          countryCode: city.countryCode,
-          region: city.region,
-          imageUrl: city.imageUrl,
-          tripCount: g._count.cityId,
-        };
+        return { ...this.toDto(city), tripCount: g._count.cityId };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
   }
 
-  private static toDto(city: Prisma.CityGetPayload<{ include: { _count: { select: { activities: true } } } }>) {
+  static toDto(city: Prisma.CityGetPayload<{ include: { _count: { select: { activities: true } } } }>) {
     return {
       id: city.id,
       name: city.name,

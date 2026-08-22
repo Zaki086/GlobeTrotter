@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as controller from '../controllers/admin.controller';
+import * as content from '../controllers/adminContent.controller';
 import { authenticate, authorize } from '../middleware/authenticate';
 import { validate } from '../middleware/validate';
 import {
@@ -26,5 +27,11 @@ router.patch(
 );
 
 router.get('/audit-logs', validate({ query: listAuditLogsQuerySchema }), controller.listAuditLogs);
+
+// Content oversight — trips, community posts and the destination catalog.
+router.get('/trips', content.listAllTrips);
+router.get('/posts', content.listAllPosts);
+router.get('/catalog', content.listCatalog);
+router.patch('/catalog/:cityId/rates', content.updateCityRates);
 
 export default router;
