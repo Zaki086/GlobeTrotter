@@ -1,0 +1,1076 @@
+{
+  "info": {
+    "_postman_id": "9d3f4c21-5a7e-4b8c-9f10-globetrotter001",
+    "name": "GlobeTrotter API",
+    "description": "Complete collection for the GlobeTrotter travel planning API.\n\n## Setup\n\n1. Start the stack: `docker compose up --build`\n2. Select the **GlobeTrotter Local** environment (or edit the `baseUrl` variable).\n3. Run **Auth → Login (demo)** once — it captures the access and refresh tokens into collection variables automatically, and every other request inherits them.\n\nRequests that create something (trip, stop, share link) also capture the new id, so the folders can be run top-to-bottom as a working end-to-end flow.\n\n## Seeded accounts\n\n| Role | Email | Password |\n| --- | --- | --- |\n| Admin | admin@globetrotter.app | AdminPass123! |\n| Traveler | demo@globetrotter.app | DemoPass123! |\n| Second traveler | sam@globetrotter.app | TravelBuddy123! |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Applies to every request in the collection.",
+          "pm.test('responds with the standard envelope', function () {",
+          "    const body = pm.response.json();",
+          "    pm.expect(body).to.have.property('success');",
+          "    pm.expect(body).to.have.property('message');",
+          "});",
+          "",
+          "pm.test('status is not 5xx', function () {",
+          "    pm.expect(pm.response.code).to.be.below(500);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "tripId", "value": "", "type": "string" },
+    { "key": "stopId", "value": "", "type": "string" },
+    { "key": "cityId", "value": "", "type": "string" },
+    { "key": "activityId", "value": "", "type": "string" },
+    { "key": "shareSlug", "value": "", "type": "string" },
+    { "key": "shareId", "value": "", "type": "string" },
+    { "key": "expenseId", "value": "", "type": "string" },
+    { "key": "demoEmail", "value": "demo@globetrotter.app", "type": "string" },
+    { "key": "demoPassword", "value": "DemoPass123!", "type": "string" },
+    { "key": "adminEmail", "value": "admin@globetrotter.app", "type": "string" },
+    { "key": "adminPassword", "value": "AdminPass123!", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Reports liveness plus PostgreSQL and Redis status. Returns 503 when degraded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('service is healthy', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d.dependencies.database).to.eql('up');",
+                  "    pm.expect(d.dependencies.redis).to.eql('up');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ada Lovelace\",\n  \"email\": \"ada+{{$timestamp}}@example.com\",\n  \"password\": \"Str0ng!Passw0rd\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+            "description": "Rate limited to 3 per hour per IP. Password must contain lowercase, uppercase, a number and a special character."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const t = pm.response.json().data.tokens;",
+                  "    pm.collectionVariables.set('accessToken', t.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', t.refreshToken);",
+                  "    pm.test('returns a token pair', function () {",
+                  "        pm.expect(t.accessToken).to.be.a('string');",
+                  "        pm.expect(t.tokenType).to.eql('Bearer');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (demo)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{demoEmail}}\",\n  \"password\": \"{{demoPassword}}\",\n  \"deviceLabel\": \"Postman\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Run this first. Captures accessToken and refreshToken into collection variables. Rate limited to 5 per minute per IP + email."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', function () { pm.response.to.have.status(200); });",
+                  "const t = pm.response.json().data.tokens;",
+                  "pm.collectionVariables.set('accessToken', t.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', t.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (admin)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Use before running the Admin folder."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const t = pm.response.json().data.tokens;",
+                  "    pm.collectionVariables.set('accessToken', t.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', t.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (wrong password)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{demoEmail}}\",\n  \"password\": \"WrongPassword123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Returns the same message as an unknown email, so accounts cannot be enumerated."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('message does not reveal which field was wrong', function () {",
+                  "    pm.expect(pm.response.json().message).to.eql('Invalid email or password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Rotates the refresh token. Replaying a consumed token revokes the entire session."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const t = pm.response.json().data.tokens;",
+                  "    pm.test('token was rotated', function () {",
+                  "        pm.expect(t.refreshToken).to.not.eql(pm.collectionVariables.get('refreshToken'));",
+                  "    });",
+                  "    pm.collectionVariables.set('accessToken', t.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', t.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Active sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/sessions", "host": ["{{baseUrl}}"], "path": ["auth", "sessions"] },
+            "description": "Every live session, so a user can spot unfamiliar devices."
+          }
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{demoEmail}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot-password"] },
+            "description": "Always 200, whether or not the email exists. Outside production the reset token is returned in the response so the flow is testable without email."
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{demoPassword}}\",\n  \"newPassword\": \"NewStr0ng!Pass\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] },
+            "description": "Revokes every other session, keeping only the one making the change."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"allDevices\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "Logout all devices",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout-all", "host": ["{{baseUrl}}"], "path": ["auth", "logout-all"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/dashboard", "host": ["{{baseUrl}}"], "path": ["dashboard"] },
+            "description": "Upcoming and recent trips, budget summary, recommended cities and countdowns in one call."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cities",
+      "item": [
+        {
+          "name": "Search cities",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cities?search=japan&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["cities"],
+              "query": [
+                { "key": "search", "value": "japan", "description": "Matches city or country name" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "country", "value": "Japan", "disabled": true },
+                { "key": "region", "value": "Asia", "disabled": true },
+                { "key": "minCostIndex", "value": "0", "disabled": true },
+                { "key": "maxCostIndex", "value": "70", "disabled": true },
+                { "key": "sortBy", "value": "popularity", "disabled": true }
+              ]
+            },
+            "description": "Seeded catalog — no third-party geocoding. 60 requests per minute."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.length) pm.collectionVariables.set('cityId', d[0].id);",
+                  "pm.test('returns pagination meta', function () {",
+                  "    pm.expect(pm.response.json().meta).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "City filters (facets)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/cities/facets", "host": ["{{baseUrl}}"], "path": ["cities", "facets"] },
+            "description": "Distinct countries and regions for the filter dropdowns."
+          }
+        },
+        {
+          "name": "Popular cities",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cities/popular?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["cities", "popular"],
+              "query": [{ "key": "limit", "value": "10" }]
+            }
+          }
+        },
+        {
+          "name": "City detail",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/cities/{{cityId}}", "host": ["{{baseUrl}}"], "path": ["cities", "{{cityId}}"] },
+            "description": "Includes the city's top activities."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activities",
+      "item": [
+        {
+          "name": "Search activities",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activities?cityId={{cityId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["activities"],
+              "query": [
+                { "key": "cityId", "value": "{{cityId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "type", "value": "FOOD", "disabled": true },
+                { "key": "minCost", "value": "0", "disabled": true },
+                { "key": "maxCost", "value": "100", "disabled": true },
+                { "key": "maxDuration", "value": "180", "disabled": true }
+              ]
+            },
+            "description": "Filter by city, type, cost and duration."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.length) pm.collectionVariables.set('activityId', d[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Popular activities",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/activities/popular?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["activities", "popular"],
+              "query": [{ "key": "limit", "value": "10" }]
+            }
+          }
+        },
+        {
+          "name": "Activity detail",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/activities/{{activityId}}", "host": ["{{baseUrl}}"], "path": ["activities", "{{activityId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trips",
+      "item": [
+        {
+          "name": "Create trip",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Trip\",\n  \"description\": \"Created from the Postman collection\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-14\",\n  \"travelers\": 2,\n  \"currency\": \"USD\",\n  \"plannedTotal\": 5000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/trips", "host": ["{{baseUrl}}"], "path": ["trips"] },
+            "description": "Rate limited to 20 per hour."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('tripId', pm.response.json().data.id);",
+                  "    pm.test('trip created', function () { pm.response.to.have.status(201); });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List trips",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips?filter=all&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips"],
+              "query": [
+                { "key": "filter", "value": "all", "description": "all | upcoming | ongoing | past" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "status", "value": "PLANNED", "disabled": true },
+                { "key": "sortBy", "value": "startDate", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.length && !pm.collectionVariables.get('tripId')) {",
+                  "    pm.collectionVariables.set('tripId', d[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get trip",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}"] },
+            "description": "Full detail: stops, scheduled activities, members, budget totals and share links."
+          }
+        },
+        {
+          "name": "Update trip",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman Test Trip (updated)\",\n  \"travelers\": 3\n}" },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}"] },
+            "description": "Narrowing the date range returns 409 if stops would fall outside it."
+          }
+        },
+        {
+          "name": "Add collaborator",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"sam@globetrotter.app\",\n  \"role\": \"EDITOR\"\n}" },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/members", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "members"] },
+            "description": "Owner only. EDITOR can modify the itinerary, VIEWER is read-only."
+          }
+        },
+        {
+          "name": "Delete trip",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}"] },
+            "description": "Owner only. Cascades to stops, activities, budget, expenses and share links."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stops",
+      "item": [
+        {
+          "name": "List stops",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/stops", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "stops"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json().data;",
+                  "if (d && d.length) pm.collectionVariables.set('stopId', d[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add stop",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cityId\": \"{{cityId}}\",\n  \"arrivalDate\": \"2026-09-01\",\n  \"departureDate\": \"2026-09-05\",\n  \"notes\": \"Booked a hotel near the station\",\n  \"accommodationCost\": 600,\n  \"transportCost\": 250,\n  \"mealsPerDayCost\": 50\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/stops", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "stops"] },
+            "description": "Dates must fall inside the trip range. Omit `sequence` to append. Recalculates the budget."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('stopId', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update stop",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"accommodationCost\": 750,\n  \"notes\": \"Upgraded the room\"\n}" },
+            "url": { "raw": "{{baseUrl}}/stops/{{stopId}}", "host": ["{{baseUrl}}"], "path": ["stops", "{{stopId}}"] }
+          }
+        },
+        {
+          "name": "Reorder stops (drag & drop)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tripId\": \"{{tripId}}\",\n  \"stopIds\": [\"replace-with\", \"the-complete\", \"ordered-list\"],\n  \"shiftDates\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/stops/reorder", "host": ["{{baseUrl}}"], "path": ["stops", "reorder"] },
+            "description": "Send the COMPLETE ordered list of stop ids for the trip. Partial lists are rejected with 400, which makes the call idempotent and safe against a stale drag. Set `shiftDates` to re-flow the arrival/departure dates into the new order."
+          }
+        },
+        {
+          "name": "Delete stop",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/stops/{{stopId}}", "host": ["{{baseUrl}}"], "path": ["stops", "{{stopId}}"] },
+            "description": "Remaining stops are resequenced so the order stays dense."
+          }
+        },
+        {
+          "name": "List stop activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/stops/{{stopId}}/activities", "host": ["{{baseUrl}}"], "path": ["stops", "{{stopId}}", "activities"] }
+          }
+        },
+        {
+          "name": "Schedule an activity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activityId\": \"{{activityId}}\",\n  \"scheduledDate\": \"2026-09-02\",\n  \"startTime\": \"09:30\",\n  \"endTime\": \"12:00\",\n  \"notes\": \"Book tickets in advance\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/stops/{{stopId}}/activities", "host": ["{{baseUrl}}"], "path": ["stops", "{{stopId}}", "activities"] },
+            "description": "The activity must belong to the stop's city. `costOverride` and `durationOverride` are stored per-trip and never mutate the catalog. 120 per minute."
+          }
+        },
+        {
+          "name": "Remove a scheduled activity",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stops/{{stopId}}/activities/{{activityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["stops", "{{stopId}}", "activities", "{{activityId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Itinerary",
+      "item": [
+        {
+          "name": "Get itinerary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/itinerary?view=timeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "itinerary"],
+              "query": [{ "key": "view", "value": "timeline", "description": "timeline | list" }]
+            },
+            "description": "Returns BOTH shapes — `timeline` (per calendar day) and `list` (grouped by city) — so the view toggle needs no second request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns both timeline and list', function () {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d.timeline).to.be.an('array');",
+                  "    pm.expect(d.list).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get calendar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/calendar",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "calendar"],
+              "query": [
+                { "key": "from", "value": "2026-09-01", "disabled": true },
+                { "key": "to", "value": "2026-09-14", "disabled": true }
+              ]
+            },
+            "description": "Events grouped by date, in three kinds: travel, stay and activity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Budget",
+      "item": [
+        {
+          "name": "Get budget",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/budget", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "budget"] },
+            "description": "Recomputed on every read. Returns category totals, percentages for charting, per-day average, a per-day breakdown and the overbudget days."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('breakdown covers every category', function () {",
+                  "    const b = pm.response.json().data.breakdown;",
+                  "    ['transport','stay','meals','activities','other'].forEach(function (k) {",
+                  "        pm.expect(b).to.have.property(k);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set budget ceilings",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"plannedTotal\": 6000,\n  \"dailyLimit\": 400\n}" },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/budget", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "budget"] },
+            "description": "`dailyLimit` drives the overbudget-day alerts."
+          }
+        },
+        {
+          "name": "List expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/expenses?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "expenses"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "category", "value": "TRANSPORT", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Log an expense",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"TRANSPORT\",\n  \"title\": \"Airport transfer\",\n  \"amount\": 65.5,\n  \"incurredOn\": \"2026-09-01\",\n  \"notes\": \"Prepaid\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/expenses", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "expenses"] },
+            "description": "Categories: TRANSPORT, STAY, MEALS, ACTIVITIES, SHOPPING, OTHER. Recalculates the budget immediately."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('expenseId', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete expense",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/expenses/{{expenseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "expenses", "{{expenseId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sharing",
+      "item": [
+        {
+          "name": "Create share link",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"allowCopy\": true,\n  \"expiresInDays\": 30\n}" },
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/share", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "share"] },
+            "description": "Owner only. Generates a cryptographically random slug. 30 per hour."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.collectionVariables.set('shareSlug', d.slug);",
+                  "    pm.collectionVariables.set('shareId', d.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List share links",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/trips/{{tripId}}/share", "host": ["{{baseUrl}}"], "path": ["trips", "{{tripId}}", "share"] }
+          }
+        },
+        {
+          "name": "View public itinerary (no auth)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/public/{{shareSlug}}", "host": ["{{baseUrl}}"], "path": ["public", "{{shareSlug}}"] },
+            "description": "Read-only and unauthenticated. Deliberately omits the member list, itemised expenses and the owner's email."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('is read-only', function () {",
+                  "    pm.expect(pm.response.json().data.readOnly).to.eql(true);",
+                  "});",
+                  "pm.test('does not leak private data', function () {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d.members).to.be.undefined;",
+                  "    pm.expect(d.expenses).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Copy public itinerary",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"My copy of this trip\",\n  \"startDate\": \"2027-03-01\"\n}" },
+            "url": { "raw": "{{baseUrl}}/public/{{shareSlug}}/copy", "host": ["{{baseUrl}}"], "path": ["public", "{{shareSlug}}", "copy"] },
+            "description": "Requires authentication, and must be a different account than the owner. Creates an independent private DRAFT trip; `startDate` shifts the whole plan while preserving stop spacing. 10 per hour."
+          }
+        },
+        {
+          "name": "Revoke share link",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trips/{{tripId}}/share/{{shareId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["trips", "{{tripId}}", "share", "{{shareId}}"]
+            },
+            "description": "The trip returns to private once its last active link is revoked."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/profile", "host": ["{{baseUrl}}"], "path": ["profile"] },
+            "description": "Saved destinations are hydrated into full city objects."
+          }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mika Tanaka\",\n  \"language\": \"en\",\n  \"currency\": \"EUR\",\n  \"bio\": \"Slow traveler, always by train where possible.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/profile", "host": ["{{baseUrl}}"], "path": ["profile"] }
+          }
+        },
+        {
+          "name": "Save a destination",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/profile/saved-destinations/{{cityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["profile", "saved-destinations", "{{cityId}}"]
+            }
+          }
+        },
+        {
+          "name": "Remove a saved destination",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/profile/saved-destinations/{{cityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["profile", "saved-destinations", "{{cityId}}"]
+            }
+          }
+        },
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/profile/notifications?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["profile", "notifications"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "unreadOnly", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark all notifications read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/profile/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["profile", "notifications", "read-all"]
+            }
+          }
+        },
+        {
+          "name": "Delete account",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"{{demoPassword}}\",\n  \"confirm\": \"DELETE\"\n}" },
+            "url": { "raw": "{{baseUrl}}/profile", "host": ["{{baseUrl}}"], "path": ["profile"] },
+            "description": "IRREVERSIBLE. Requires the current password plus confirm: \"DELETE\". Cascades to trips, stops, sessions and notifications."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/analytics?days=30&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "analytics"],
+              "query": [
+                { "key": "days", "value": "30" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "ADMIN only — run 'Login (admin)' first. Totals, popular cities and activities, user growth series and engagement metrics."
+          }
+        },
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "role", "value": "USER", "disabled": true },
+                { "key": "isActive", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", ":userId"],
+              "variable": [{ "key": "userId", "value": "", "description": "Target user id" }]
+            }
+          }
+        },
+        {
+          "name": "Update user role / status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "users", ":userId"],
+              "variable": [{ "key": "userId", "value": "", "description": "Target user id" }]
+            },
+            "description": "Deactivating revokes that user's sessions immediately. Admins cannot demote or deactivate themselves, and the last active admin cannot be removed."
+          }
+        },
+        {
+          "name": "Audit logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "action", "value": "user.login", "disabled": true },
+                { "key": "resourceType", "value": "trip", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

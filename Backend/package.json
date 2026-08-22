@@ -2,14 +2,14 @@
   "name": "globetrotter-backend",
   "version": "1.0.0",
   "description": "GlobeTrotter — personalized travel planning platform backend (Express + PostgreSQL + Prisma + Redis)",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -55,9 +55,11 @@
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.5",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^6.0.2",
     "@types/swagger-ui-express": "^4.1.7",
     "jest": "^29.7.0",
+    "pg": "^8.23.0",
     "prisma": "^5.22.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

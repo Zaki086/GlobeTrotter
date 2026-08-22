@@ -1,7 +1,7 @@
 import { Prisma, TripStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
-import { cache, CACHE_KEY } from '../config/redis';
-import { CACHE_TTL } from '../config/constants';
+import { cache } from '../config/redis';
+import { CACHE_KEY, CACHE_TTL } from '../config/constants';
 import { toAmount } from '../utils/money';
 import { daysUntil, inclusiveDayCount, toDateString, toUtcDate } from '../utils/dates';
 import { CityService } from './city.service';

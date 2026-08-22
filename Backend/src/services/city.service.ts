@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
-import { cache, CACHE_KEY } from '../config/redis';
-import { CACHE_TTL } from '../config/constants';
+import { cache } from '../config/redis';
+import { CACHE_KEY, CACHE_TTL } from '../config/constants';
 import { ApiError } from '../utils/ApiError';
 import { stableHash } from '../utils/hash';
 import type { ListCitiesQuery } from '../validators/city.validator';

@@ -1,0 +1,111 @@
+# ---------------------------------------------------------------------------
+# GlobeTrotter — full local stack.
+#
+#   docker compose up --build
+#
+# Brings up PostgreSQL, Redis and the API. The api service waits for both
+# datastores to report healthy, applies migrations and seeds the database
+# before it starts serving, so a single command gives a working system.
+# ---------------------------------------------------------------------------
+
+name: globetrotter
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: globetrotter-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-globetrotter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-globetrotter}
+      POSTGRES_DB: ${POSTGRES_DB:-globetrotter}
+      # Deterministic collation so ORDER BY matches across machines.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # `-d` matters: without it pg_isready reports ready before the app
+      # database itself exists, and the API would race it and crash.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-globetrotter} -d ${POSTGRES_DB:-globetrotter}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [globetrotter]
+
+  redis:
+    image: redis:7-alpine
+    container_name: globetrotter-redis
+    restart: unless-stopped
+    # Rate-limit counters are rebuildable, so no persistence is needed; an
+    # LRU cap keeps the container from growing without bound.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ''
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [globetrotter]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: globetrotter-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      API_PREFIX: ${API_PREFIX:-/api/v1}
+
+      # Service names resolve on the compose network — not localhost.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-globetrotter}:${POSTGRES_PASSWORD:-globetrotter}@postgres:5432/${POSTGRES_DB:-globetrotter}?schema=public
+      REDIS_URL: redis://redis:6379
+
+      # Quoted because the ":?" default message would otherwise be parsed as
+      # a nested YAML mapping. Compose refuses to start if these are unset.
+      JWT_ACCESS_SECRET: "${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env - generate one with openssl rand -hex 64}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env - generate one with openssl rand -hex 64}"
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@globetrotter.app}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-AdminPass123!}
+      SEED_DEMO_EMAIL: ${SEED_DEMO_EMAIL:-demo@globetrotter.app}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-DemoPass123!}
+    ports:
+      - '${PORT:-4000}:4000'
+    volumes:
+      - api_logs:/app/logs
+    # migrate deploy is idempotent; the seed upserts, so a restart is safe.
+    command: >
+      sh -c "npx prisma migrate deploy &&
+             npx tsx prisma/seed.ts &&
+             node dist/src/server.js"
+    networks: [globetrotter]
+
+volumes:
+  postgres_data:
+    driver: local
+  api_logs:
+    driver: local
+
+networks:
+  globetrotter:
+    driver: bridge

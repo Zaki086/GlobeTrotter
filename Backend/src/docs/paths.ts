@@ -807,8 +807,8 @@ export const paths = {
       parameters: [{ name: 'slug', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: { content: json('#/components/schemas/CopyTripRequest') },
       responses: {
+        // authErrors already covers 403 (the owner may disallow copying).
         201: ok('Itinerary copied'),
-        403: { $ref: '#/components/responses/Forbidden' },
         ...authErrors,
       },
     },
